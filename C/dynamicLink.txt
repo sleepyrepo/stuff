@@ -1,0 +1,72 @@
+#include<stdio.h>
+void main(){
+
+puts("doing main stuff :P");
+funcOne();
+funcTwo();
+puts("back to main stuff :D");
+
+}
+
+/*
+--func1.c
+
+char* funcOne(){
+  char* str = "funcOne string!!";
+  puts("funcOne doing sth :|");
+  return str;
+}
+
+--func2.c
+
+char* funcTwo(){
+  char* str = "funcTwo string!!";
+  puts("funcTwo doing sth :|");
+  return str;
+}
+
+
+STATIC LIB(.a)
+gcc -c func1.c func2.c							-->compile & assemble into object files(.o)
+ar cr libfunc.a *.o							-->create static library(.a) from object file
+ar -t ./libfunc.a							-->list object files in static (.a) library
+gcc ./main1.c -L. -lfunc -o ./main1					-->compile & link with static library
+gcc ./main1.c -L<path_to_lib_dir> -l<lib_name_without_lib...> -o main1
+
+DYNAMIC LIB/shared object (.so)
+gcc -fpic -c func1.c func2.c						--> create object code (.o), -c compile & assemble
+gcc -shared func1.o func2.o -o libfunc.so				-->create shared object from object files
+gcc main1.c -L/root/Desktop/myC/libLink -lfunc -o ./main1		--> -L location of .so, -l name of so (without lib & .so)
+
+./main1 --> willl get ERROR --> b/c .so not in run time load path
+./main1: error while loading shared libraries: libfunc.so: cannot open shared object file: No such file or directory
+ldd ./main1								-->show sahred dependencies, and check if EXE can resolve .so at run time
+									   libfunc.so => not found
+couple ways to fix runtime load
+
+op 1) cp ./libfunc.so /usr/lib/						--> copy the .so to known runtime lib load path
+
+op 2) ldconfig /root/Desktop/myC/libLink				-->add runtime load path using ldconfig gone if 
+									   /etc/ld.so.cache gets rebuild (ldconfig)
+
+
+op 2) echo "/root/Desktop/myC/libLink" > /etc/ld.so.conf.d/myLib.conf	-->add a runtile load path config to ld conf.d/
+									   or append this path to one of hte file in the dir
+or
+echo "/root/Desktop/myC/libLink" >> /etc/ld.so.conf			-->append load path to ls.so.conf file
+ldconfig -v | grep : -B2						-->reload the load/show ld load path cache
+
+op 3) export LD_LIBRARY_PATH=/root/Desktop/myC/libLink			--> set ld load path env
+env | grep -i path
+unset LD_LIBRARY_PATH							-->remove env
+
+./main1
+
+#quick dynamic so and link
+gcc -fpic -shared ./func1.c func2.c -o ./libfunc.so
+gcc ./main1.c -L/root/Desktop/myC/libLink -lfunc -o ./main1
+ldconfig /root/Desktop/myC/libLink
+
+http://www.yolinux.com/TUTORIALS/LibraryArchives-StaticAndDynamic.html
+http://howtolamp.com/articles/adding-shared-libraries-to-system-library-path/
+*/

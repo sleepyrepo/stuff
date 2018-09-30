@@ -1,0 +1,42 @@
+#include<stdio.h>
+void main(){
+
+puts("doing main stuff :P");
+funcOne();
+funcTwo();
+puts("back to main stuff :D");
+
+}
+
+/*
+--func1.c
+
+char* funcOne(){
+  char* str = "funcOne string!!";
+  puts("funcOne doing sth :|");
+  return str;
+}
+
+--func2.c
+
+char* funcTwo(){
+  char* str = "funcTwo string!!";
+  puts("funcTwo doing sth :|");
+  return str;
+}
+
+
+STATIC LIB
+compile & assemble into object file(.o)
+cc -c func1.c func2.c --> func1.o func2.o
+create static library(.a) from object file
+ar -cvq libfunc.a func1.o func2.o
+list object files in static (.a) library
+ar -t ./libfunc.a
+compile & link with library
+cc ./main1.c -L/root/Desktop/myC/libLink -lfunc -o main1
+cc ./main1.c -L<path_to_lib_dir> -l<lib_name_without_lib...> -o main1
+
+DYNAMIC LIB
+http://www.yolinux.com/TUTORIALS/LibraryArchives-StaticAndDynamic.html
+*/
