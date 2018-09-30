@@ -1,0 +1,114 @@
+#!/bin/bash
+
+serverIP=10.0.0.19
+clientIP=10.0.0.17
+zone="local.com"
+
+#need to update first or bind9 not found
+aptitude update
+
+#http://frankhinek.com/how-to-setup-a-dns-server-for-a-home-lab-on-ubuntu-14-04/
+aptitude install dnsutils bind9 -y
+
+#initial setup acl, recursion, listening interface, forwarder
+content=$(cat<<EOF
+acl "trusted" {                                 #declare an acl
+        10.0.0.0/16;
+};
+options {
+        directory "/var/cache/bind";
+        allow-transfer {
+                                #"none";        #disable zone transfer (default permit)
+                                $clientIP;      #allow transfer only to 10.0.0.3
+        };
+        recursion yes;                          #bind act as a proxy to query other DNS for client
+        allow-recursion {
+                                trusted;        #allow recursion to the acl
+        };
+        listen-on {
+                        $serverIP;
+        };
+        forwarders {
+                8.8.8.8;                        #DNS to foward query during recursion
+        };
+        dnssec-validation auto;
+        auth-nxdomain no;                       #conform to RFC1035
+        listen-on-v6 { any; };
+};
+EOF
+)
+echo "$content" > /etc/bind/named.conf.options
+
+#declare zone file locations with reverse dns on 10.0.0.0/16
+content=$(cat<<EOF
+zone "local.com" {
+type master;
+file "/etc/bind/zones/db.local.com";
+};
+zone "0.10.in-addr.arpa" {
+type master;
+file "/etc/bind/zones/db.10.0";
+};
+EOF
+)
+echo "$content" > /etc/bind/named.conf.local
+
+#create zone files and dir
+mkdir /etc/bind/zones
+
+#all GQDN needs '.' at the end or it won't work
+#@       IN      SOA     ns1.local.com. admin@localhost.
+#stating which server owns this zone file
+#serial (revision) should be incremented after edit
+#$TTL need \ to escape being read as empty variable
+content=$(cat<<EOF
+\$TTL    604800
+@       IN      SOA     ns1.local.com. admin@localhost. (
+                          3         ; Serial
+                     604800         ; Refresh
+                      86400         ; Retry
+                    2419200         ; Expire
+                     604800 )       ; Negative Cache TTL
+                        IN      NS      ns1.local.com.
+                        IN      A    	  $serverIP
+;A records
+ns1             IN      A$serverIP
+kerberos        IN      CNAME   ns1
+ldap            IN      CNAME   ns1
+client          IN      A   	 $clientIP
+EOF
+)
+echo "$content" > /etc/bind/zones/db.$zone
+
+content=$(cat<<EOF
+\$TTL    604800
+@       IN      SOA     ns1.local.com. admin@local.com. (
+                              3         ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+        IN      NS      ns1.local.com.
+;PTR records
+3.0     IN      PTR     ns1.local.com.          ;10.0.0.3
+3.0     IN      PTR     kerberos.local.com.     ;10.0.0.3
+3.0     IN      PTR     ldap.local.com.         ;10.0.0.3
+17.0    IN      PTR     client.local.com.       ;10.0.0.17
+
+EOF
+)
+echo "$content" > /etc/bind/zones/db.10.0
+
+#check bind main config files i.e. named.conf.options, named.conf.local
+named-checkconf
+
+#check forward and reverse zone files config
+named-checkzone local.com /etc/bind/zones/db.local.com
+named-checkzone 0.10.in-addr.arpa /etc/bind/zones/db.10.0
+
+echo -e "nameserver\t$serverIP" > /etc/resolv.conf
+
+#restart bind
+systemctl restart bind9.service
+systemctl status bind9.service
+

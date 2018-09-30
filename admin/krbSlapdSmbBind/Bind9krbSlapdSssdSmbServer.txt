@@ -1,0 +1,490 @@
+#!/bin/bash
+
+serverIP=$(hostname -I | grep -oP '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
+clientIP=10.0.0.20
+zone="local.com"
+#grab IP's last octet to use in reverse DNS zone
+serveroctet=${serverIP##*.}				#remove everything from the front to '.' greedy option use # for not greedy
+clientoctet=${clientIP##*.}
+
+#setup host file just incase
+echo "kerberos" > /etc/hostname
+content=$(cat /etc/hosts)
+echo "$serverIP		kerberos.local.com	kerberos" > /etc/hosts
+echo "$content" >> /etc/hosts
+
+#BIND9
+#need to update first or bind9 not found
+aptitude update
+
+#http://frankhinek.com/how-to-setup-a-dns-server-for-a-home-lab-on-ubuntu-14-04/
+aptitude install dnsutils bind9 -y
+
+#initial setup acl, recursion, listening interface, forwarder
+content=$(cat<<EOF
+acl "trusted" {                                 #declare an acl
+        10.0.0.0/24;
+};
+options {
+        directory "/var/cache/bind";
+        allow-transfer {
+                                #"none";        #disable zone transfer (default permit)
+                                $clientIP;      #allow transfer only to 10.0.0.3
+        };
+        recursion yes;                          #bind act as a proxy to query other DNS for client
+        allow-recursion {
+                                trusted;        #allow recursion to the acl
+        };
+        listen-on {
+                        $serverIP;
+        };
+        forwarders {
+                8.8.8.8;                        #DNS to foward query during recursion
+        };
+        dnssec-validation auto;
+        auth-nxdomain no;                       #conform to RFC1035
+        listen-on-v6 { any; };
+};
+EOF
+)
+echo "$content" > /etc/bind/named.conf.options
+
+#declare zone file locations with reverse dns on 10.0.0.0/24
+content=$(cat<<EOF
+zone "local.com" {
+type master;
+file "/etc/bind/zones/db.local.com";
+};
+zone "0.0.10.in-addr.arpa" {
+type master;
+file "/etc/bind/zones/db.10.0.0";
+};
+EOF
+)
+echo "$content" > /etc/bind/named.conf.local
+
+#create zone files and dir
+mkdir /etc/bind/zones
+
+#all GQDN needs '.' at the end or it won't work
+#@       IN      SOA     ns1.local.com. admin@localhost.
+#stating which server owns this zone file
+#serial (revision) should be incremented after edit
+#$TTL need \ to escape being read as empty variable
+content=$(cat<<EOF
+\$TTL    604800
+@       IN      SOA     kerberos.local.com. admin@localhost. (
+                          3         ; Serial
+                     604800         ; Refresh
+                      86400         ; Retry
+                    2419200         ; Expire
+                     604800 )       ; Negative Cache TTL
+                        IN      NS      kerberos.local.com.
+                        IN      A    	  $serverIP
+;A records
+kerberos        IN      A	$serverIP
+client          IN      A   	 $clientIP
+EOF
+)
+echo "$content" > /etc/bind/zones/db.$zone
+
+content=$(cat<<EOF
+\$TTL    604800
+@       IN      SOA     kerberos.local.com. admin@local.com. (
+                              3         ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+        IN      NS      kerberos.local.com.
+;PTR records
+$serveroctet     IN      PTR     kerberos.local.com.     ;$serverIP
+$clientoctet    IN      PTR     client.local.com.       ;$clientIP
+
+EOF
+)
+echo "$content" > /etc/bind/zones/db.10.0.0
+
+#check bind main config files i.e. named.conf.options, named.conf.local named-checkconf
+
+#check forward and reverse zone files config
+named-checkzone local.com /etc/bind/zones/db.local.com
+named-checkzone 0.10.in-addr.arpa /etc/bind/zones/db.10.0.0
+
+#restart bind and interface
+systemctl restart bind9.service
+systemctl status bind9.service
+
+#touchup DHCP to enable new DNS
+sed -i 's|domain-name, domain-name-servers, domain-search, host-name,|#domain-name, domain-name-servers, domain-search, host-name,|' /etc/dhcp/dhclient.conf
+sed -i "s|prepend domain-name-servers 8.8.8.8;|prepend domain-name-servers $serverIP;|" /etc/dhcp/dhclient.conf
+
+#refresh DNS through DHCP
+dhclient
+ 
+#-------------------Bind9 Done---------------------------------------
+
+#KERBEROS
+realm="local.com"
+urealm="LOCAL.COM"
+hostName="kerberos"
+
+echo $hostName > /etc/hostname
+content=$(cat /etc/hosts)
+echo "$serverIP		$hostName.$realm	$hostName" > /etc/hosts
+echo "$content" >> /etc/hosts
+
+#set auto time update b/c kerberos allows only 5 min window error
+#And install ssh (client & server) just incase
+aptitude install ntp ssh -y
+systemctl restart ntp.service
+
+#Kerberos server setup
+aptitude install krb5-kdc krb5-admin-server -y
+
+#setup /etc/krb5.conf
+content=$(cat <<EOF
+[libdefaults]
+       default_realm = $urealm
+      	rdns = false
+[realms]
+        $urealm = {
+                	kdc = $hostName.$realm
+                	admin_server = $hostName.$realm
+		 	default_domain = $realm
+		}
+[domain_realm]
+        .$realm = $urealm
+        $realm = $urealm
+[logging]
+    #kdc = FILE:/var/log/kerberos/krb5kdc.log
+    #admin_server = FILE:/var/log/kerberos/kadmin.log
+    default = FILE:/var/log/krb5lib.log
+EOF
+)
+echo "$content" > /etc/krb5.conf
+
+#enable krb logging in systemd
+#add logging dir path to ReadWriteDirectories in
+#content=$(grep ReadWriteDirectories /lib/systemd/system/krb5-admin-server.service)
+#sed -i "s|$content|$content /var/log/kerberos|" /lib/systemd/system/krb5-admin-server.service
+#content=$(grep ReadWriteDirectories /lib/systemd/system/krb5-kdc.service)
+#sed -i "s|$content|$content /var/log/kerberos|" /lib/systemd/system/krb5-kdc.service
+
+#create krb database
+krb5_newrealm
+
+#add new krb users
+kadmin.local -q "addprinc kuser"
+kadmin.local -q "addprinc cuser"
+kadmin.local -q "addprinc luser"
+
+#restart krb
+systemctl restart krb5-admin-server.service
+systemctl restart krb5-kdc.service
+
+#-------------------Krb5 Done---------------------------------------
+
+#SLAPD
+#install/config slapd and ldap
+aptitude install slapd ldap-utils libsasl2-modules-gssapi-mit -y
+#Without sssd libsasl2-modules-gssapi-mit is required for SASL <-> GSSAPI
+#ldap-utils will create ldap.conf which is not involve with slapd
+#but still need it for add/modify ldap stuff
+#slapd config file is in /etc/default/slapd
+#ldap password: ldap1234
+dpkg-reconfigure slapd
+#####################
+#no config no
+#local.com
+#corp
+#ldap1234
+#ldap1234
+#MDB
+#DB remove after purge yes
+#move old DB yes
+#allow LDAPv2 no
+######################
+
+#needed to make ldap-utils work
+sed -i "s|\#BASE\tdc=example,dc=com|BASE\tdc=local,dc=com|" /etc/ldap/ldap.conf
+sed -i "s|\#URI\tldap:\/\/ldap\.example\.com ldap:\/\/ldap-master\.example\.com:666|URI\tldap:\/\/$hostName.$realm|" /etc/ldap/ldap.conf
+
+#kerberod create keytab for slapd
+kadmin.local -q "addprinc -randkey ldap/$hostName.$realm"
+kadmin.local -q "ktadd -k /etc/ldap/ldap.keytab ldap/$hostName.$realm"
+
+#set keytab permision for slapd(openldap/group need r/w)
+chown openldap:openldap /etc/ldap/ldap.keytab
+chmod 640 /etc/ldap/ldap.keytab
+
+#now tell slapd where the keytab is
+sed -i 's|#export KRB5_KTNAME=/etc/krb5.keytab|export KRB5_KTNAME=/etc/ldap/ldap.keytab|' /etc/default/slapd
+
+#create/add new ldap users with password ldap1234
+#only c, l and kuser can login b/c they have password in krb database
+#prepare user info
+content=$(cat<<EOF
+# ldapusers, local.com
+dn: cn=ldapusers,dc=local,dc=com
+gidNumber: 5000
+cn: ldapusers
+objectClass: posixGroup
+objectClass: top
+
+# auser, ldapusers, local.com
+dn: cn=auser,cn=ldapusers,dc=local,dc=com
+cn: auser
+givenName: andrew
+gidNumber: 5000
+homeDirectory: /home/users/auser
+sn: user
+loginShell: /bin/bash
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: top
+uidNumber: 2000
+uid: auser
+
+# buser, ldapusers, local.com
+dn: cn=buser,cn=ldapusers,dc=local,dc=com
+cn: buser
+givenName: ldap
+gidNumber: 5000
+homeDirectory: /home/users/buser
+sn: user
+loginShell: /bin/bash
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: top
+uidNumber: 2001
+uid: buser
+
+# cuser, ldapusers, local.com
+dn: cn=cuser,cn=ldapusers,dc=local,dc=com
+cn: cuser
+givenName: charlie
+gidNumber: 5000
+homeDirectory: /home/users/cuser
+sn: user
+loginShell: /bin/bash
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: top
+uidNumber: 2002
+uid: cuser
+
+# luser, ldapusers, local.com
+dn: cn=luser,cn=ldapusers,dc=local,dc=com
+cn: luser
+givenName: ldap
+gidNumber: 5000
+homeDirectory: /home/users/luser
+sn: user
+loginShell: /bin/bash
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: top
+uidNumber: 2003
+uid: luser
+
+# kuser, ldapusers, local.com
+dn: cn=kuser,cn=ldapusers,dc=local,dc=com
+cn: kuser
+givenName: kerberos
+gidNumber: 5000
+homeDirectory: /home/users/kuser
+sn: user
+loginShell: /bin/bash
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: top
+uidNumber: 2004
+uid: kuser
+EOF
+)
+echo "$content" > ./newLdapUsers.ldif
+
+#add users using admin cred
+ldapadd -D cn=admin,dc=local,dc=com -w ldap1234 -f ./newLdapUsers.ldif
+
+#ldap usage and issues
+#simple ldapsearch with admin
+#local query
+#ldapsearch -D "cn=admin,dc=local,dc=com" -w ldap1234 -h localhost
+#to use gssapi after kinit
+#ldapsearch -Y GSSAPI
+#modify cn=config, etc use
+#sudo ldapmodify -Q -Y EXTERNAL -H ldapi:/// -f ./addRequireAuth.ldif
+#-Y EXTERNAL with sudo will use uid=0
+
+#require all clients to authenticate, no anonymous access
+content=$(cat<<EOF
+dn: olcDatabase={-1}frontend,cn=config
+add: olcRequires
+olcRequires: authc
+
+dn: olcDatabase={1}mdb,cn=config
+add: olcRequires
+olcRequires: authc
+EOF
+)
+echo "$content" > ./addRequireAuth.ldif
+ldapmodify -Q -Y EXTERNAL -H ldapi:/// -f ./addRequireAuth.ldif
+
+#restart slapd
+systemctl restart slapd.service
+
+#-------------------Slapd Done---------------------------------------
+
+#SSSD
+#need sssd b/c samba can not query slap by itself
+#so need sssd to set NSS to point passwd/group to slap instead (getent passwd)
+#with that smbd can now access users UID/GID
+#https://docs.fedoraproject.org/en-US/Fedora/17/html/System_Administrators_Guide/sect-SSSD_User_Guide-Configuring_Domains-Setting_up_Kerberos_Authentication.html
+
+#install sssd and nss/pam dependences (it will also install libsasl2-modules-gssapi-mit for SASL <--> GSSAPI)
+aptitude install sssd libpam-sss libnss-sss sssd-tools -y
+
+#create sssd config file
+#ldap_sasl_authid = host/client.local.com
+#Specify the SASL authorization id to use
+#When GSSAPI is used, this represents the Kerberos principal used for authentication to the directory
+#This option can either contain the full principal (for example host/myhost@EXAMPLE.COM)
+#orjust the principal name (for example host/myhost)
+#ldap_krb5_keytab = /etc/sssd/client.keytab 
+#ldap_krb5_init_creds = true
+#Specifies that the id_provider should init Kerberos credentials (TGT)
+#This action is performed only if SASL is used and the mechanism selected is GSSAPI
+# krb5_validate/keytab to validate users kerberos ticket for security
+#***sssd don't like comments :P
+
+content=$(cat<<EOF
+[sssd]
+config_file_version = 2
+services = nss, pam
+domains = LOCAL
+[nss]
+[pam]
+[domain/LOCAL]
+id_provider = ldap
+auth_provider = krb5
+ldap_schema = rfc2307
+ldap_uri = ldap://kerberos.local.com
+ldap_search_base = dc=local,dc=com
+enumerate = true
+cache_credentials = false
+chpass_provider = krb5
+ldap_sasl_mech = GSSAPI
+ldap_sasl_authid = host/kerberos.local.com
+ldap_krb5_keytab = /etc/sssd/sssd.keytab 
+ldap_krb5_init_creds = true
+krb5_server = kerberos.local.com
+krb5_realm = LOCAL.COM
+krb5_keytab = /etc/sssd/sssd.keytab
+krb5_validate = true
+EOF
+)
+
+echo "$content" > /etc/sssd/sssd.conf
+
+#if sssd.conf is not root:root 600, it wont start
+chown root:root /etc/sssd/sssd.conf 
+chmod 0600 /etc/sssd/sssd.conf 
+
+#sssd needs a keytab to talk with slapd
+kadmin.local -q "addprinc -randkey host/$hostName.$realm"
+kadmin.local -q "ktadd -k /etc/sssd/sssd.keytab host/$hostName.$realm"
+
+#sssd is serious about permission root:root 600
+chown root:root /etc/sssd/sssd.keytab
+chmod 600 /etc/sssd/sssd.keytab 
+
+#restart sssd
+systemctl restart sssd.service
+systemctl status sssd.service
+
+#-------------------SssD Done---------------------------------------
+
+#SAMBA
+#http://dbocklandt.be/tutorial/setting-up-a-fileserver-with-samba-openldap-and-kerberos/
+#install full samba package
+aptitude install samba -y
+
+#setup dir/files for smb sharing
+mkdir -p /data/ldapusers
+mkdir -p /data/public
+echo "ldapusers data..." > /data/ldapusers/ldapusers.txt
+echo "public data..." > /data/public/public.txt
+
+#public folder for guest, ldapusers for ldapusers group only
+chown -R :ldapusers /data/ldapusers
+#ldapusers folder needs 770 so group can list items "x"
+chmod -R 770 /data/ldapusers
+#public needs 777 b/c they needs to beable list "x"
+chmod -R 777 /data/public
+
+#smbd needs a keytab too
+kadmin.local -q "addprinc -randkey cifs/$hostName.$realm"
+kadmin.local -q "ktadd -k /etc/samba/smb.keytab cifs/$hostName.$realm"
+
+#not sure about permission for sambs, so for now 644
+chmod 644 /etc/samba/smb.keytab
+
+content=$(cat<<EOF
+[global]
+   workgroup = WORKGROUP
+   server string = %h samba server working!!
+   dns proxy = no
+   log file = /var/log/samba/log.%m
+   log level = 3
+   syslog = 0
+   panic action = /usr/share/samba/panic-action %d
+
+   security = ADS
+   realm = LOCAL.COM
+   password server = kerberos.local.com
+   kerberos method = dedicated keytab
+   dedicated keytab file = /etc/samba/smb.keytab
+   
+   acl map full control = True 
+   
+   encrypt passwords = true
+   obey pam restrictions = no
+   unix password sync = no
+   passwd program = /usr/bin/passwd %u
+   pam password change = yes
+   #map to guest = bad user
+ 
+   usershare allow guests = no
+ 
+   [public]
+   comment = "Public share for everyone"
+   path = /data/public
+   browsable = yes
+   guest ok = yes
+   read only = no
+   create mask = 0777
+ 
+   [ldapusers]
+   comment = "users group private share"
+   path = /data/ldapusers
+   browsable = yes
+   guest ok = no
+   read only = no
+   create mask = 0770
+   # This is a group from OpenLDAP
+   valid users = @ldapusers
+EOF
+)
+echo "$content" > /etc/samba/smb.conf
+
+systemctl restart smbd.service
+systemctl status smbd.service
+
+#create keytab for client, so he can scp it over
+kadmin.local -q "addprinc -randkey host/client.$realm"
+kadmin.local -q "ktadd -k ./client.keytab host/client.$realm"
+chmod 644 ./client.keytab
+
+

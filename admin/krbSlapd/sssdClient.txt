@@ -1,0 +1,138 @@
+#!/bin/bash
+
+#update first
+aptitude update
+#client sssd kerberos ldap mkhomedir
+#server setup same as ldap/kerberos
+#https://wiki.ubuntu.com/Enterprise/Authentication/sssd
+
+realm="local.com"
+urealm="LOCAL.COM"
+hostName="kerberos"
+serverIP=10.0.0.4
+
+#dont forget setting host file /etc/hosts
+echo "client" > /etc/hostname
+content=$(cat /etc/hosts)
+echo "$serverIP		$hostName.$realm	$hostName" > /etc/hosts
+echo "$content" >> /etc/hosts
+
+#set auto time update b/c kerberos allows only 5 min window error
+aptitude install ntp -y
+systemctl restart ntp.service
+
+aptitude install krb5-user sssd libpam-sss libnss-sss sssd-tools ldap-utils -y
+#aptitude install sssd libpam-sss libnss-sss sssd-tools -y
+#seems libnss-sss will also install libsasl2-modules-gssapi-mit too
+
+#create file /usr/share/pam-configs/mkhomedir with content
+content=$(cat<<EOF
+Name: Auto make home dir on login
+Default: yes
+Priority: 900
+Session-Type: Additional
+Session:
+	required	pam_mkhomedir.so umask=0022 skel=/etc/skel
+EOF
+)
+echo "$content" > /usr/share/pam-configs/mkhomedir
+
+#Then update pam with
+pam-auth-update
+##########
+#remove passwd checks
+#not register user in systemd***no user can login from gdm without this
+#no login keychain gdm** kerberos user's cant login
+#########
+
+#setup sssd
+#https://docs.fedoraproject.org/en-US/Fedora/17/html/System_Administrators_Guide/sect-SSSD_User_Guide-Configuring_Domains-Setting_up_Kerberos_Authentication.html
+#copy client keytab from kerberos server
+#so client can use it to authenticate with server
+
+#ldap_sasl_authid = host/client.local.com
+#Specify the SASL authorization id to use
+#When GSSAPI is used, this represents the Kerberos principal used for authentication to the directory
+#This option can either contain the full principal (for example host/myhost@EXAMPLE.COM)
+#orjust the principal name (for example host/myhost)
+#ldap_krb5_keytab = /etc/sssd/client.keytab 
+#ldap_krb5_init_creds = true
+#Specifies that the id_provider should init Kerberos credentials (TGT)
+#This action is performed only if SASL is used and the mechanism selected is GSSAPI
+#***sssd don't like comments :P
+
+#create sssd config file
+content=$(cat<<EOF
+[sssd]
+config_file_version = 2
+services = nss, pam
+domains = LOCAL
+[nss]
+[pam]
+[domain/LOCAL]
+id_provider = ldap
+auth_provider = krb5
+ldap_schema = rfc2307
+ldap_uri = ldap://kerberos.local.com
+ldap_search_base = dc=local,dc=com
+enumerate = true
+cache_credentials = false
+chpass_provider = krb5
+ldap_sasl_mech = GSSAPI
+ldap_sasl_authid = host/client.local.com
+ldap_krb5_keytab = /etc/sssd/client.keytab 
+ldap_krb5_init_creds = true
+krb5_server = kerberos.local.com
+krb5_realm = LOCAL.COM
+EOF
+)
+echo "$content" > /etc/sssd/sssd.conf
+chown root:root /etc/sssd/sssd.conf 
+chmod 0600 /etc/sssd/sssd.conf 
+
+#setup ldap-utils
+content=$(cat<<EOF
+BASE	dc=local,dc=com
+URI	ldap://kerberos.local.com
+SASL_MECH GSSAPI
+
+#SIZELIMIT	12
+#TIMELIMIT	15
+#DEREF		never
+
+# TLS certificates (needed for GnuTLS)
+#TLS_CACERT	/etc/ssl/certs/ca-certificates.crt
+EOF
+)
+echo "$content" > /etc/ldap/ldap.conf
+
+#setup kerberos
+content=$(cat<<EOF
+[libdefaults]
+	default_realm = LOCAL.COM
+	rdns = false
+[realms]
+	LOCAL.COM = {
+		kdc = kerberos.local.com
+		admin_server = kerberos.local.com
+	}
+[domain_realm]
+	.local.com = LOCAL.COM
+	local.com = LOCAL.COM
+EOF
+)
+echo "$content" > /etc/krb5.conf
+
+#grab client keytab from server
+sudo scp mee@$hostName:/home/mee/client.keytab /etc/sssd/client.keytab
+
+#sssd needs root read write
+chown root:root /etc/sssd/client.keytab
+chmod 0600 /etc/sssd/client.keytab
+
+#restart sssd
+systemctl restart sssd.service
+systemctl status sssd.service
+
+echo 'NEEDS REBOOT!!!'
+

@@ -1,0 +1,136 @@
+#!/bin/bash
+######################################################
+#Server Setup kerberos with SSH single sign on
+realm="local.com"
+urealm="LOCAL.COM"
+kerberosUser="kuser"
+serverIP=$(hostname -I | grep -oP '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
+#dns=10.0.0.12
+hostName="kerberos"
+sshServer="host/$hostName.$realm"
+
+#dnschef -i 10.0.0.12 —file ./dns.file
+#dns.file
+#[A]
+#*.local.com=10.0.0.3
+
+##########################
+#kdc = kerberos.local.com
+#admin = kerberos.local.com
+###make sure auto update time is set
+#check iptables
+##########################
+
+#set auto time update
+#kerberos allows only 5 min window error
+systemctl restart ntp.service
+
+#setup hostname and FQDN ** VERY IMPORTANT or kerberos won’t know who’s who
+echo "$hostName" > /etc/hostname
+content=$(cat /etc/hosts)
+echo "$serverIP		$hostName.$realm $hostName" > /etc/hosts
+echo "$content" >> /etc/hosts
+
+#Very slow without DNS
+#if have DNS then set resolver
+#echo "nameserver	$dns" > /etc/resolv.conf
+#restart hostname
+#/etc/init.d/hostname.sh
+
+#install kerberos
+aptitude -y install krb5-kdc krb5-admin-server
+#realm = LOCAL.COM
+#kdc = kerberos.local.com
+#admin = kerberos.local.com
+#sudo dpkg-reconfigure krb5-kdc
+
+
+#setup /etc/krb5.conf
+
+krb5Conf=$(cat <<EOF
+
+[libdefaults]
+        default_realm = $urealm
+	kdc_timesync = 1
+    	ccache_type = 4
+    	forwardable = true
+    	proxiable = true
+      	rdns = false
+[realms]
+        $urealm = {
+                kdc = $hostName.$realm
+                admin_server = $hostName.$realm
+		 default_domain = $realm
+        }
+[domain_realm]
+        .$realm = $urealm
+        $realm = $urealm
+[logging]
+    kdc = FILE:/var/log/kerberos/krb5kdc.log
+    admin_server = FILE:/var/log/kerberos/kadmin.log
+    default = FILE:/var/log/kerberos/krb5lib.log
+EOF
+)
+
+echo "$krb5Conf" > /etc/krb5.conf
+
+#create kerberos log floder
+mkdir /var/log/kerberos
+
+#create kerberos database
+krb5_newrealm
+#realm = LOCAL.COM
+#kdc = kerberos.local.com
+#admin = kerberos.local.com
+
+#enable remote admin acl
+sed -i "s|\# \*\/admin \*|  \*\/admin@$urealm \*|" /etc/krb5kdc/kadm5.acl
+#user | instead of / b/c using "" for $variable and pattern had /
+#add kerberos user and service
+kadmin.local -q "addprinc $kerberosUser"
+kadmin.local -q "addprinc root/admin"
+kadmin.local -q "addprinc -randkey $sshServer"
+kadmin.local -q "ktadd $sshServer"
+
+
+#if need, setup kerberos PAM
+#SSO SSH will work without it
+#aptitude install libpam-krb5
+
+systemctl restart krb5-admin-server.service
+systemctl restart krb5-kdc.service
+
+#prepare SSH for kerberos single sign on through gssapi-with-mic
+sed -i 's/\#GSSAPIAuthentication no/GSSAPIAuthentication yes/' /etc/ssh/sshd_config
+sed -i 's/\#GSSAPICleanupCredentials yes/GSSAPICleanupCredentials yes/' /etc/ssh/sshd_config
+#restart SSH
+systemctl restart ssh.service
+
+#add kuser profile, no password required b/c authentication is done via kerberos
+useradd -ms /bin/bash kuser
+
+
+#########################################################################
+#Client Setup kerberos with SSH single sign on
+realm="local.com"
+kerberosIP=10.0.0.3
+#dns=10.0.0.12
+krbName="kerberos"
+kuser=“kuser”
+
+content=$(cat /etc/hosts)
+echo "$kerberosIP	$krbName.$realm $krbName" > /etc/hosts
+echo "$content" >> /etc/hosts
+
+systemctl restart ntp.service
+aptitude install krb5-user -y
+#realm = LOCAL.COM
+#kdc = kerberos.local.com
+#admin = kerberos.local.com
+
+#set SSH for gssapi-with-mic
+sed -i ’s/GSSAPIDelegateCredentials no/GSSAPIDelegateCredentials yes/‘ /etc/ssh/ssh_config
+service ssh restart
+
+kinit $kuser
+ssh -K $kuser@$krbName.$realm

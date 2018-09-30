@@ -1,0 +1,222 @@
+#!/bin/bash
+
+realm="local.com"
+urealm="LOCAL.COM"
+hostName="kerberos"
+
+#dont forget setting host file /etc/hosts
+serverIP=$(hostname -I | grep -oP '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
+echo $hostName > /etc/hostname
+content=$(cat /etc/hosts)
+echo "$serverIP		$hostName.$realm	$hostName" > /etc/hosts
+echo "$content" >> /etc/hosts
+
+#set auto time update b/c kerberos allows only 5 min window error
+#install ssh (client & server) just incase
+aptitude install ntp ssh -y
+systemctl restart ntp.service
+
+#Kerberos server setup
+aptitude install krb5-kdc krb5-admin-server -y
+
+#setup /etc/krb5.conf
+content=$(cat <<EOF
+[libdefaults]
+       default_realm = $urealm
+      	rdns = false
+[realms]
+        $urealm = {
+                	kdc = $hostName.$realm
+                	admin_server = $hostName.$realm
+		 	default_domain = $realm
+		}
+[domain_realm]
+        .$realm = $urealm
+        $realm = $urealm
+[logging]
+    #kdc = FILE:/var/log/kerberos/krb5kdc.log
+    #admin_server = FILE:/var/log/kerberos/kadmin.log
+    default = FILE:/var/log/krb5lib.log
+EOF
+)
+echo "$content" > /etc/krb5.conf
+
+#add kerberos log dir
+#mkdir /var/log/kerberos
+
+#enable krb logging in systemd
+#add logging dir path to ReadWriteDirectories in
+#content=$(grep ReadWriteDirectories /lib/systemd/system/krb5-admin-server.service)
+#sed -i "s|$content|$content /var/log/kerberos|" /lib/systemd/system/krb5-admin-server.service
+#content=$(grep ReadWriteDirectories /lib/systemd/system/krb5-kdc.service)
+#sed -i "s|$content|$content /var/log/kerberos|" /lib/systemd/system/krb5-kdc.service
+
+#create krb database
+krb5_newrealm
+
+#add new krb users
+kadmin.local -q "addprinc kuser"
+kadmin.local -q "addprinc cuser"
+kadmin.local -q "addprinc luser"
+
+#restart krb
+systemctl restart krb5-admin-server.service
+systemctl restart krb5-kdc.service
+
+#install/config slapd and ldap
+aptitude install slapd ldap-utils libsasl2-modules-gssapi-mit -y
+#need libsasl2-modules-gssapi-mit b/c slapd don't install it like sssd
+#ldap-utils will create ldap.conf which is not involve with slapd
+#but still need it for add/modify ldap stuff
+#slapd config file is in /etc/default/slapd
+#ldap password: ldap1234
+dpkg-reconfigure slapd
+#####################
+#no config no
+#local.com
+#corp
+#ldap1234
+#ldap1234
+#MDB
+#DB remove after purge yes
+#move old DB yes
+#allow LDAPv2 no
+######################
+
+#needed to make ldap-utils work
+sed -i "s|\#BASE\tdc=example,dc=com|BASE\tdc=local,dc=com|" /etc/ldap/ldap.conf
+sed -i "s|\#URI\tldap:\/\/ldap\.example\.com ldap:\/\/ldap-master\.example\.com:666|URI\tldap:\/\/$hostName.$realm|" /etc/ldap/ldap.conf
+
+#kerberod create keytab for slapd
+kadmin.local -q "addprinc -randkey ldap/$hostName.$realm"
+kadmin.local -q "ktadd -k /etc/ldap/ldap.keytab ldap/$hostName.$realm"
+
+#set keytab permision for slapd(slapd/group need r/w)
+chown openldap:openldap /etc/ldap/ldap.keytab
+chmod 644 /etc/ldap/ldap.keytab
+
+#now tell slapd where the keytab is
+sed -i 's|#export KRB5_KTNAME=/etc/krb5.keytab|export KRB5_KTNAME=/etc/ldap/ldap.keytab|' /etc/default/slapd
+
+#create/add new ldap users with password ldap1234
+#only c, l and kuser can login b/c they have password in krb database
+#prepare user info
+content=$(cat<<EOF
+# ldapusers, local.com
+dn: cn=ldapusers,dc=local,dc=com
+gidNumber: 5000
+cn: ldapusers
+objectClass: posixGroup
+objectClass: top
+
+# auser, ldapusers, local.com
+dn: cn=auser,cn=ldapusers,dc=local,dc=com
+cn: auser
+givenName: andrew
+gidNumber: 5000
+homeDirectory: /home/users/auser
+sn: user
+loginShell: /bin/bash
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: top
+uidNumber: 2000
+uid: auser
+
+# buser, ldapusers, local.com
+dn: cn=buser,cn=ldapusers,dc=local,dc=com
+cn: buser
+givenName: ldap
+gidNumber: 5000
+homeDirectory: /home/users/buser
+sn: user
+loginShell: /bin/bash
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: top
+uidNumber: 2001
+uid: buser
+
+# cuser, ldapusers, local.com
+dn: cn=cuser,cn=ldapusers,dc=local,dc=com
+cn: cuser
+givenName: charlie
+gidNumber: 5000
+homeDirectory: /home/users/cuser
+sn: user
+loginShell: /bin/bash
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: top
+uidNumber: 2002
+uid: cuser
+
+# luser, ldapusers, local.com
+dn: cn=luser,cn=ldapusers,dc=local,dc=com
+cn: luser
+givenName: ldap
+gidNumber: 5000
+homeDirectory: /home/users/luser
+sn: user
+loginShell: /bin/bash
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: top
+uidNumber: 2003
+uid: luser
+
+# kuser, ldapusers, local.com
+dn: cn=kuser,cn=ldapusers,dc=local,dc=com
+cn: kuser
+givenName: kerberos
+gidNumber: 5000
+homeDirectory: /home/users/kuser
+sn: user
+loginShell: /bin/bash
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: top
+uidNumber: 2004
+uid: kuser
+EOF
+)
+echo "$content" > ./newLdapUsers.ldif
+
+#add users
+ldapadd -D cn=admin,dc=local,dc=com -w ldap1234 -f ./newLdapUsers.ldif
+
+#ldap usage and issues
+#simple ldapsearch with admin
+#local query
+#ldapsearch -D "cn=admin,dc=local,dc=com" -w ldap1234 -h localhost
+#to use gssapi after kinit
+#ldapsearch -Y GSSAPI
+
+#require all clients to authenticate, no anonymous access
+content=$(cat<<EOF
+dn: olcDatabase={-1}frontend,cn=config
+add: olcRequires
+olcRequires: authc
+
+dn: olcDatabase={1}mdb,cn=config
+add: olcRequires
+olcRequires: authc
+EOF
+)
+echo "$content" > ./addRequireAuth.ldif
+ldapmodify -Q -Y EXTERNAL -H ldapi:/// -f ./addRequireAuth.ldif
+
+#restart slapd
+systemctl restart slapd.service
+
+#somehow client needs a keytab off it self
+kadmin.local -q "addprinc -randkey host/client.$realm"
+kadmin.local -q "ktadd -k /home/mee/client.keytab host/client.$realm"
+
+#give read access to file so clietn can copy it over with scp
+chmod 644 ./client.keytab 
+
+echo 'don't forget to move /home/mee/client.keytab to client:/etc/krb.keytab and chown root:root or sssd won't work'
+echo 'debug slap d with sudo slapd -d -1 !!!!, but it'll try to look for keytab in /etc/krb5.keytab'
+
+

@@ -1,0 +1,56 @@
+create local centos 6.9 repo according to
+http://www.serverlab.ca/tutorials/linux/network-services/creating-a-yum-repository-server-for-red-hat-and-centos/
+
+yum install createrepo
+mkdir -p /repos/CentOS/6/9/Packages
+createrepo /repos/CentOS/6/9
+
+#find rsync mirror in http://centos.org/download/mirrors/
+#in my case i'm gona grab everything from 5.9 x86_64
+rsync -rz --progress rsync://centos.sonn.com/CentOS/6.9/os/x86_64/  /repos/CentOS/6/9/
+
+#method 1: mount the repo on httpd
+ln -s /repos/CentOS /var/www/html/CentOS
+
+#method 2: create local repo with
+nano /etc/yum.repos.d/CentOS-core.repo
+
+[Local-Install]
+name=CentOS Core $releasever - $basearch
+baseurl=file:///repos/CentOS/6/9/
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora file:///etc/pki/rpm-gpg/RPM-GPG-KEY
+
+#now run yum normally
+yum search minicom
+
+#create zip of repo
+zip -r ./repo.zip /repo
+
+#split repo b/s its 5.7 GB, too big for DVD
+split -b 3G ./repo.zip ./repo.zip.
+
+#rejoin split zip later on
+cat ./repo.zip.* > ./repo.zip
+
+———
+clone http updates repo
+wget -m http://mirror.centos.org/centos/6/updates/x86_64/Packages/
+
+rm -f /etc/yum.repos.d/*			#delete all repo config
+nano /etc/yum.repos.d/CentOS-core.repo
+
+[local]						#config local repo for os/Packages
+name=CentOS-$releasever - Local
+baseurl=file:///repos/CentOS/6/9/Packages
+enabled=1
+
+[updates]					#config update repo for updates
+name=CentOS-$releasever - Updates
+baseurl=file:///repos/CentOS/6/9/updates
+enabled=1
+
+mv updates /repos/CentOS/6/9/			#move the updates repo to the path
+createrepo /repos/CentOS/6/9/Packages		#create repodata in this repo
+createrepo /repos/CentOS/6/9/updates		#create another repodata for this repo

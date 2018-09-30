@@ -1,0 +1,26 @@
+#create offline fog 1.2 install package for centos6.9
+#no external repo required
+#wget http://sourceforge.net/projects/freeghost/files/FOG/fog_1.2.0/fog_1.2.0.tar.gz
+#mkdir fog-1.2-depends
+#yum install --downloadonly --downloaddir=./fog-1.2-depends httpd php php-cli php-common php-gd php-mysql mysql mysql-server dhcp tftp-server nfs-utils vsftpd net-tools wget xinetd tar gzip make m4 gcc gcc-c++ lftp -y
+
+#using yumdownloader
+#will download and resolve dependencies 
+#even if the packages are alread exist 
+
+yumdownloader --resolve --destdir=./downloaderDepends httpd php php-cli php-common php-gd php-mysql mysql mysql-server dhcp tftp-server nfs-utils vsftpd net-tools wget xinetd tar gzip make m4 gcc gcc-c++ lftp
+
+#addition stuff
+yumdownloader --resolve --destdir=./downloaderMoreDepends   apr-util-ldap keyutils keyutils-libs libgssglue libgssglue-devel libtirpc libtirpc-devel nfs-utils-lib-devel nfs-utils-lib python-argparse rpcbind
+
+#-------installMe.sh
+sed -i "s|SELINUX=enforcing|SELINUX=permissive|" /etc/selinux/config
+setenforce 0			#prevent PXE permission denied
+tar xvfz ./fog_1.2.0.tar.gz
+unzip fog-1.2-depends
+cd fog-1.2-depends
+rpm -iv --force ./*		#use force so it wont try to look for dependencies
+cd ../fog_1.2.0/bin/
+./installfog.sh
+chkconfig iptables off		#disable iptables auto start
+service iptables stop		#disable iptables service

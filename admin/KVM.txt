@@ -1,0 +1,44 @@
+
+**enable virtual hardware support
+https://www.cyberciti.biz/faq/kvm-virtualization-in-redhat-centos-scientific-linux-6/
+
+VMDK to kvm convert
+https://rbgeek.wordpress.com/2013/08/13/converting-a-vmware-workstation-virtual-machine-to-kvm/
+
+
+#check if virtusalize is enable
+egrep -o '(vmx|svm)' /proc/cpuinfo
+vmx -> intel
+svm -> AMD
+will show one for each core
+
+#WORKS!!
+yum install qemu-kvm python-virtinst libvirt libvirt-python virt-manager libguestfs-tools acpid 
+qemu-img convert winxp.vmdk -O qcow2 /var/lib/libvirt/images/winxp.img
+
+/etc/init.d/libvirtd start
+/etc/init.d/NetworkManager stop
+
+#/etc/init.d/iptables stop#*******NAT mode requires iptable forawrding rules, so don’t shut iptable off of NAT.  
+#restart libvirt to reapply the iptable forward rules
+#virtb0 is the virtual switch/router
+
+virsh -c qemu:///system list
+
+#allow wheel group to run virt-manager without password
+nano /etc/polkit-1/localauthority/50-local.d/50-org.wheel-libvirt-local-access.pkla
+[Allow group wheel libvirt management permissions]
+Identity=unix-group:wheel
+Action=org.libvirt.unix.manage
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+
+
+#——adding bridge interface to KVM
+/etc/init.d/NetworkManager stop
+virsh
+iface-bridge eth0 bridge0 --no-stp
+
+#enablke forwarding for NAT
+sysctl net.ipv4.conf.all.forwarding=1

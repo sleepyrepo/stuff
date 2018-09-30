@@ -1,0 +1,62 @@
+
+#to enable easy AD SSO kerberos
+#install centrify-sshd from centrifyDC-suit for redhat
+yum install CentrifyDC-openssh-7.4p1-5.4.2-rhel5.x86_64.rpm
+
+#stop openSSH
+systemctl stop sshd.service
+
+#start centrify-sshd
+/etc/init.d/centrify-sshd start
+
+#by default root login is disable
+#edit vi /etc/centrifydc/ssh/sshd_config
+#add and restart centrify-sshd
+PermitRootLogin yes
+/etc/init.d/centrify-sshd restart
+
+#kerberos SSO
+#in putty
+connection->SSH->kerberos: check attempt kerberos auth(SSH2)
+#principle name of the host we are trying to connect to
+#can be found by running adinfo -C on centos.
+think KRB5 setup service/host
+service = nfs, http, cifs, host etc..
+host = FQDN
+connection->SSH->kerberos->service principle name: host/centos7.local.com
+session->IP: 10.0.0.15
+session->saved session: kerberos
+save
+
+#RSA/public key authentication
+
+#method1
+#create RSA key pair with ssh-keygen
+#run ssh-keygen and accept all default
+#will RSA 2048
+cd ~/.ssh
+cat ./id_rsa.pub > ./authorized_keys
+#copy private key id_rsa over to window7 using
+pscp.exe root@10.0.0.15:/root/.ssh/id_rsa ..\..\..\Users\user1\Desktop\
+#open puttykeygen->convert->import
+#browse to the id_rsa, and "save private key"
+#this will convert openSSH pem format into .ppt that putty can use
+
+#create session in putty
+#connection->Auth->browse and find the new private key.ppt
+#connection->data:auto-login-username: root
+#session->IP 10.0.0.15
+#session->save session: root-rsa-login
+#save 
+
+
+#method2
+create RSA key pair with puttygen
+#run puttygen->generate
+#copy openSSH public key in 
+#key section "public key for pasting into OpenSSH authorized_keys file" 
+into target authorized_keys
+save public key (optional)
+save private key
+
+follow the create session in putty above

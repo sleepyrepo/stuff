@@ -1,0 +1,38 @@
+#putty-openSSH RSA login
+
+#enable RSA(SSH1)/publickey(SSH2) auth
+vi /etc/ssh/sshd_config
+ RSAAuthentication yes
+ PubkeyAuthentication yes
+
+#method1
+#create RSA key pair with ssh-keygen
+#run ssh-keygen and accept all default
+#will RSA 2048
+cd ~/.ssh
+cat ./id_rsa.pub > ./authorized_keys
+#copy private key id_rsa over to window7 using
+pscp.exe root@10.0.0.15:/root/.ssh/id_rsa ..\..\..\Users\user1\Desktop\
+#open puttykeygen->convert->import
+#browse to the id_rsa, and "save private key"
+#this will convert openSSH pem format into .ppt that putty can use
+
+#create session in putty
+#connection->Auth->browse and find the new private key.ppt
+#connection->data:auto-login-username: root
+#session->IP 10.0.0.15
+#session->save session: root-rsa-login
+#save 
+
+
+#method2
+create RSA key pair with puttygen
+#run puttygen->generate
+#copy openSSH public key in 
+#key section "public key for pasting into OpenSSH authorized_keys file" 
+into target authorized_keys
+save public key (optional)
+save private key
+
+follow the create session in putty above
+

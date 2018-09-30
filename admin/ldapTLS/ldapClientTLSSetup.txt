@@ -1,0 +1,69 @@
+#!/bin/bash
+
+#for client to use ldap
+realm="local.com"
+hostName="kerberos"
+#dont forget setting host file /etc/hosts
+serverIP=10.0.1.9
+
+#if no DNS, set host file
+content=$(cat /etc/hosts)
+echo "$serverIP		$hostName.$realm	$hostName" > /etc/hosts
+echo "$content" >> /etc/hosts
+
+
+aptitude install libnss-ldapd libpam-ldapd  -y
+#set nss to use ldap on
+#passwd
+#shadow
+#group
+
+#fix ldap config
+sed -i "s|\#BASE\tdc=example,dc=com|BASE\tdc=local,dc=com|" /etc/ldap/ldap.conf
+sed -i "s|\#URI\tldap:\/\/ldap\.example\.com ldap:\/\/ldap-master\.example\.com:666|URI\tldap:\/\/$hostName.$realm|" /etc/ldap/ldap.conf
+
+#create file to enable auto create home dir when ldap user login
+#create file /usr/share/pam-configs/mkhomedir with content
+
+stuff=$(cat<<EOF
+Name: Create home directory during login
+Default: yes
+Priority: 900
+Session-Type: Additional
+Session:
+        required        pam_mkhomedir.so umask=0022 skel=/etc/skel
+EOF
+)
+echo "$stuff" > /usr/share/pam-configs/mkhomedir
+
+#then update pam
+pam-auth-update
+
+#start nslcd name switch localcache deamon
+service nslcd start
+#set nslcd to auto start, and reboot 
+update-rc.d nslcd enable
+
+#get CA cert
+scp mee@kerberos:/etc/ldap/ca.crt /etc/ldap/ca.crt
+chmod 644 /etc/ldap/ca.crt
+
+content=$(cat<<EOF
+TLS_CACERT      /etc/ldap/ca.crt
+SSL start_tls
+EOF
+)
+echo "$content" >> /etc/ldap/ldap.conf
+
+content=$(cat<<EOF
+ssl start_tls
+tls_reqcert demand
+tls_cacertfile /etc/ldap/ca.crt
+EOF
+)
+echo "$content" >> /etc/nslcd.conf
+systemc restart nslcd.service
+
+reboot
+
+#make sure users in ldap database at least of class posixAccount, top, etc

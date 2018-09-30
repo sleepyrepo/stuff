@@ -1,0 +1,250 @@
+Windows
+
+#disable SMB1
+PS:> get-smbServerConfiguration
+#check if enableSMB1protocol  true
+#if true disable with
+PS:> set-smbServerConfiguration -enableSMB1Protocol $false
+
+
+#setup container
+add OU linux
+add OU client in linux OU
+delegate control linux OU and sub OU to user join for add/delete computer
+
+
+Linux
+#update samba to force first use SMB3 (use SMB1 by default)
+#in [global] section, add
+
+client max protocol = SMB3
+
+#update hostname to centOS7
+vi /etc/hostname
+
+#setup static persistent DNS using NetworkManager(GUI), then restart NetworkManager
+systemctl restart NetworkManager.service
+
+#download centrify linux agent from 
+#https://www.centrify.com/express/server-suite-form/
+
+mv tar file to /tmp, then untar
+tar xvfz ./centrify-suite-2017.2-rhel5-x86_64.tgz
+
+---------------------------------
+#auto install centrify direct control express 
+./install-express.sh
+#enter all default response except
+AD domain: local.com
+container DN: ou=client,ou=linux
+
+#after reboot both smbclient and smb share mount should require no passowrd
+smbclient //dc1.local.com/domainShare -N
+
+--------------------------------
+#manual install
+yum install CentrifyDC-openssl-5.4.2-rhel5.x86_64.rpm 
+yum install CentrifyDC-openldap-5.4.2-rhel5.x86_64.rpm 
+yum install CentrifyDC-curl-5.4.2-rhel5.x86_64.rpm 
+yum install CentrifyDC-5.4.2-rhel5.x86_64.rpm
+
+#join linux using 
+-w = workstation
+-c X500 path
+-u use join, b/c use has permission to add/del computers to linux OU (deligation) 
+
+adjoin -w -c "ou=client,ou=linux" -V -u join local.com
+adinfo
+#at this point host should join with AD
+#list all users in AD
+adquery user
+#list all groups in AD
+adquery group
+
+
+
+-----------------------------
+[root@localhost tmp]# ./install-express.sh 
+
+*****                                                                  *****
+*****            WELCOME to the Centrify Express installer!            *****
+*****                                                                  *****
+
+Detecting local platform ...
+
+Running ./adcheck-rhel5-x86_64 ...
+OSCHK    : Verify that this is a supported OS                          : Pass
+PATCH    : Linux patch check                                           : Pass
+PERL     : Verify perl is present and is a good version                : Pass
+SAMBA    : Inspecting Samba installation                               : Pass
+SPACECHK : Check if there is enough disk space in /var /usr /tmp       : Pass
+HOSTNAME : Verify hostname setting                                     : Pass
+NSHOSTS  : Check hosts line in /etc/nsswitch.conf                      : Pass
+DNSPROBE : Probe DNS server 10.0.0.3                                   : Pass
+DNSCHECK : Analyze basic health of DNS servers                         : Warning
+         : Only one DNS server was found in /etc/resolv.conf.
+         : At least one backup DNS server is recommended for
+         : enterprise installations.
+         : Only one good DNS server was found
+         : You might be able to continue but it is likely that you
+         : will have problems.
+         : Add more good DNS servers into /etc/resolv.conf.
+
+WHATSSH  : Is this an SSH that Centrify DirectControl Agent works well with: Pass
+SSH      : SSHD version and configuration                              : Warning
+         : You are running OpenSSH_6.6.1p1, OpenSSL 1.0.1e-fips 11 Feb 2013.
+         : 
+         : This version of OpenSSH does not seem to be configured for PAM,
+         : ChallengeResponse and Kerberos/GSSAPI support.
+         : To get Active Directory users to successfully login,
+         : you need to configure your OpenSSH with the following options:
+         : (display the ones we identified were not set)
+         : ChallengeResponseAuthentication yes
+         : UsePAM Yes
+         : 
+         : Centrify provides a version of OpenSSH that's configured properly
+         : to allow AD users to login and provides Kerberos GSSAPI support.
+
+2 warnings were encountered during check. We recommend checking these before proceeding
+
+WARNING: Centrify adcheck exited with warning(s).
+
+This installation script provides installation of the following services
+in Centrify Infrastructure Services on UNIX and Linux:
+ - Centrify Identity Broker Service
+ - Centrify Privilege Elevation Service
+ - Centrify Auditing & Monitoring Service
+
+The Centrify Identity Broker Service and Centrify Privilege Elevation Service
+are contained in the CentrifyDC (Centrify DirectControl) packages,
+and the Centrify Auditing & Monitoring Service is in the CentrifyDA
+(Centrify DirectAudit) packages.
+
+With this script, you can perform the following tasks:
+    - Install (update) CentrifyDC & CentrifyDA packages (License required) [E]
+    - Install (update) CentrifyDC only packages (License required) [S]
+    - Install (update) CentrifyDC Express packages [X]
+    - Custom install (update) of individual packages [C]
+
+You can type Q at any prompt to quit the installation and exit
+the script without making any changes to your environment.
+
+How do you want to proceed? (E|S|X|C|Q) [X]: 
+
+The Express mode license allows you to install a total of 200 agents.
+The Express mode license does not allow the use of licensed features for
+advanced authentication, access control, auditing, and centralized
+management.  This includes, but is not limited to, features such as
+SmartCard authentication, Privilege Elevation, Auditing, Group Policy,
+Login User Filtering, and NSS overrides.
+
+Do you want to continue to install in Express mode? (C|Y|Q|N) [Y]:
+
+Do you want to run Centrify adcheck to verify your AD environment? (Q|Y|N) [Y]:
+
+Please enter the Active Directory domain to check [company.com]: local.com
+Join an Active Directory domain? (Q|Y|N) [Y]:
+    Enter the Active Directory domain to join [local.com]: 
+    Enter the Active Directory authorized user [administrator]: 
+    Enter the password for the Active Directory user: 
+    Enter the computer name [centOS7]: 
+    Enter the container DN [Computers]: ou=client,ou=linux
+    Enter the name of the domain controller [auto detect]: 
+Reboot the computer after installation? (Q|Y|N) [Y]:N
+
+You entered the following:
+    Install CentrifyDC 5.4.2 package : Y
+    Install CentrifyDC-openssl 5.4.2 package: Y
+    Install CentrifyDC-openldap 5.4.2 package: Y
+    Install CentrifyDC-curl 5.4.2 package: Y
+    Install CentrifyDC-ldapproxy 5.4.2 package: N
+    Install CentrifyDC-nis 5.4.2 package: N
+    Install CentrifyDC-openssh 5.4.2 package: N
+    Install CentrifyDA 3.4.2 package: N
+    Run Centrify adcheck             : Y
+    Join an Active Directory domain  : Y
+    Active Directory domain to join  : local.com
+    Active Directory authorized user : administrator
+    computer name                    : centOS7
+    container DN                     : ou=client,ou=linux
+    domain controller name           : auto detect
+    Reboot computer                  : N
+
+
+If this information is correct and you want to proceed, type "Y".
+To change any information, type "N" and enter new information.
+Do you want to continue (Y) or re-enter information? (Q|Y|N) [Y]:
+
+Running ./adcheck-rhel5-x86_64 ...
+NSHOSTS  : Check hosts line in /etc/nsswitch.conf                      : Pass
+DNSPROBE : Probe DNS server 10.0.0.3                                   : Pass
+DNSCHECK : Analyze basic health of DNS servers                         : Warning
+         : Only one DNS server was found in /etc/resolv.conf.
+         : At least one backup DNS server is recommended for
+         : enterprise installations.
+         : Only one good DNS server was found
+         : You might be able to continue but it is likely that you
+         : will have problems.
+         : Add more good DNS servers into /etc/resolv.conf.
+
+WHATSSH  : Is this an SSH that Centrify DirectControl Agent works well with: Pass
+SSH      : SSHD version and configuration                              : Warning
+         : You are running OpenSSH_6.6.1p1, OpenSSL 1.0.1e-fips 11 Feb 2013.
+         : 
+         : This version of OpenSSH does not seem to be configured for PAM,
+         : ChallengeResponse and Kerberos/GSSAPI support.
+         : To get Active Directory users to successfully login,
+         : you need to configure your OpenSSH with the following options:
+         : (display the ones we identified were not set)
+         : ChallengeResponseAuthentication yes
+         : UsePAM Yes
+         : 
+         : Centrify provides a version of OpenSSH that's configured properly
+         : to allow AD users to login and provides Kerberos GSSAPI support.
+
+DOMNAME  : Check that the domain name is reasonable                    : Pass
+ADDC     : Find domain controllers in DNS                              : Pass
+ADDNS    : DNS lookup of DC dc1.local.com                              : Pass
+ADPORT   : Port scan of DC dc1.local.com 10.0.0.3                      : Pass
+ADDC     : Check Domain Controllers                                    : Pass
+ADDNS    : DNS lookup of DC dc1.local.com                              : Pass
+GCPORT   : Port scan of GC dc1.local.com 10.0.0.3                      : Pass
+ADGC     : Check Global Catalog servers                                : Pass
+DCUP     : Check for operational DCs in local.com                      : Pass
+SITEUP   : Check DCs for local.com in our site                         : Pass
+DNSSYM   : Check DNS server symmetry                                   : Pass
+ADSITE   : Check that this machine's subnet is in a site known by AD   : Pass
+GSITE    : See if we think this is the correct site                    : Pass
+TIME     : Check clock synchronization                                 : Pass
+ADSYNC   : Check domains all synchronized                              : Pass
+2 warnings were encountered during check. We recommend checking these before proceeding
+
+WARNING: Centrify adcheck exited with warning(s).
+Preparing packages...
+CentrifyDC-openssl-5.4.2-668.x86_64
+CentrifyDC-openldap-5.4.2-668.x86_64
+CentrifyDC-curl-5.4.2-668.x86_64
+CentrifyDC-5.4.2-668.x86_64
+Joining the Active Directory domain local.com ...
+Using domain controller: dc1.local.com writable=true
+Join to domain:local.com, zone:Auto Zone successful
+
+Centrify DirectControl started.
+Loading domains and trusts information
+
+Initializing cache
+.
+You have successfully joined the Active Directory domain: local.com
+in the Centrify DirectControl zone: Auto Zone 
+
+
+You may need to restart other services that rely upon PAM and NSS or simply
+reboot the computer for proper operation.  Failure to do so may result in
+login problems for AD users.
+
+
+
+Install.sh completed successfully.
+
+
+

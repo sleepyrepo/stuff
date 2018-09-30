@@ -1,0 +1,99 @@
+yum update
+
+#setup httpd
+yum install httpd
+
+#enable auto start
+chkconfig --level 5 httpd on
+
+#config to listen on ipv4 all interface
+vi /etc/httpd/conf/httpd.conf
+Listen 0.0.0.0:80
+
+#open ind save ngress firewall port 80
+iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
+service iptables save
+
+#insert vmware tool disk
+cp VMwareTools-10.1.6-5214329.tar.gz /home/centos/Desktop/
+tar xvf ./VMwareTools-10.1.6-5214329.tar.gz
+cd vmware-tools-distrib/
+./vmware-install.pl
+
+#setup mariadb
+#add mariadb repo so yum can install mariadb
+vi /etc/yum.repos.d/MariaDB.repo
+[mariadb]
+name = MariaDB
+baseurl = http://yum.mariadb.org/10.1/centos6-amd64
+gpgkey=https://yum.mariadb.org/RPM-GPG-KEY-MariaDB
+gpgcheck=1
+
+#install/config mariadb
+yum install MariaDB-server.x86_64
+service mysql start
+mysql_secure_installation
+
+#setup PHP and php/mysql
+#check php version with yum list php
+#php.x86_64                                                                 5.3.3-49.el6 
+#it is version 5.3.3 = null byte has not been patch????, so its good(null byte is patched on 5.3.4)
+yum install php.x86_64 php-mysql.x86_64
+
+#config httpd to load php module
+vi /etc/httpd/conf/httpd.conf
+#add this line
+LoadModule php5_module modules/libphp5.so
+service httpd restart
+
+#test apache PHP with
+/var/www/html/info.php
+<?php
+phpinfo();
+?>
+
+#add phpFusion
+wget https://iweb.dl.sourceforge.net/project/php-fusion/PHP-Fusion%20Archives/7.x/PHP-Fusion-7.02.07.zip
+cp PHP-Fusion-7.02.07.zip /var/www/html
+cd /var/www/html
+unzip PHP-Fusion-7.02.07.zip
+
+#setup database for phpFusion
+mysql -u root -ppass1234
+create database phpFusion;
+create user "phpFusion"@"localhost" identified by "pass1234";
+grant all privileges on phpFusion.* to "phpFusion"@"localhost";
+show grants for "phpFusion"@"localhost";
+
+[root@localhost files]# vi file.list 
+administration/db_backups/
+downloads/
+downloads/images/
+downloads/submissions/
+downloads/submissions/images/
+forum/attachments/
+ftp_upload/
+images/
+images/imagelist.js
+images/articles/
+images/avatars/
+images/news/
+images/news/thumbs/
+images/news_cats/
+images/photoalbum/
+images/photoalbum/submissions/
+config.php
+robots.txt
+ 
+for f in $(cat ./file.list);do chmod 777 $f;done
+
+#setup php fusion
+http://10.0.0.9/PHP-Fusion-7.02.07/files/setup.php
+
+user:phpFusion
+pass: superlongpass
+db: phpFusion
+
+admin user: phpFusion
+pass: adminsuperpass
+admin pass: superduperpass

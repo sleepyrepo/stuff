@@ -1,0 +1,62 @@
+yum install samba -y
+yum install samba-winbind -y
+
+systemctl enable smb.service
+#open firewall port 445
+mkdir /pub
+chmod 777 /pub
+#make sure it works first i.e.
+
+[global]
+    map to guest = Bad User	#so NTLM user from windows have something to fall back
+[pub]
+    path = /pub
+    public = yes
+
+    #  if set  public = No, we should  set parameter valid users .
+    #  and when the user or group is in AD , the setting syntaxes is:
+    #  valid users = LOCAL\username +LOCAL\oroup
+    writable = yes
+
+#disable seLinux
+vi /etc/selinux/config
+SELINUX=permissive
+#reboot
+
+yum install ./CentrifyDC-adbindproxy-5.4.0-rhel4.x86_64.rpm
+/usr/share/centrifydc/bin/adbindproxy.pl
+
+check this first
+https://community.centrify.com/t5/Centrify-Express/Centrify-Express-and-Samba-4-integration/td-p/24180
+
+https://community.centrify.com/t5/Centrify-Express/SMB-file-sharing-not-working-CentOS-6-7-CentrifyDC-adbindproxy-5/m-p/23662#M9554
+
+samba path: /usr/
+
+
+systemctl stop smb.service		#this one wont work anymore
+/etc/init.d/centrifydc-samba start
+
+mkdir /domainUser
+chown -R :domain_users /domainUser
+chmod -R 770 /domainUser
+
+vi /etc/samba/smb.conf
+
+[DomainUser]
+    comment = "domain_users only :D"
+    path = /domainUser
+    public = no
+
+    #  if set  public = No, we should  set parameter valid users .
+    #  and when the user or group is in AD , the setting syntaxes is:
+    #  valid users = LOCAL\username +LOCAL\group
+    # from my testing valid users = +group
+    # +DOMAIN\group dont work
+    valid users = +domain_users
+
+    writable = yes
+
+#these all works
+dir \\centos7\domainUser
+smbclient //centos7/domainUser -N -c "ls"

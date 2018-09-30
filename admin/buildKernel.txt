@@ -1,0 +1,33 @@
+aptitude update
+
+#aptitude install build-essential libncurses5-dev gcc libssl-dev grub2 bc libelf-dev kernel-package -y
+aptitude install build-essential libelf-dev kernel-package -y
+
+wget https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.14.14.tar.xz
+tar Jxvf linux-4.14.14.tar.xz
+cd linux-4.14.14
+
+#kernel config file
+#cp /boot/config-4.9.0-kali3-amd64 .config	#copy current kernel config file to use
+						#if no configuration is required, jump to build kernel
+#kernel configuration
+#make config					#terminal config kernel once item at a time(too many config)
+#make menuconfig				#GUI configuration, require libncurses5-dev
+#make xconfig					#modern GUI
+#make gconfig					#gtk based GUI
+#make oldconfig					#create config file with settings from current kernel
+						#will ask for any new unconfigure kernel feature
+make olddefconfig				#same but with yes to all new unconfigure kernel feature
+#make oldnoconfig				#same but with no to all new unconfigure kernel feature
+
+#rebuild kernel
+#make clean					#remove previous compiled kernel/files
+#make distclean					#same but more detail i.e. .config
+make deb-pkg					#make/compike kernel in to deb packages
+
+#make -j32 deb-pkg. ***CPU too hot		#build deb with 32 concurrent runing jobs(way faster)
+#make-kpkg					#same
+
+cd..
+dpkg -i ./linux-*.deb
+
