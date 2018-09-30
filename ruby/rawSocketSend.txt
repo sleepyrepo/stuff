@@ -1,0 +1,102 @@
+#!/usr/bin/ruby
+
+#gem install zhexdump
+require "socket"
+require "zhexdump"					#for hexdump packet at the end
+
+iface = "eth0"
+#ifidx = `cat /sys/class/net/#{iface}/ifindex`.strip.to_i	#another way to get interface index
+ifidx = `ip link show #{iface}`.split(":")[0].to_i		#anothe rway to get interface index
+#SIOCGIFNDEX = 0x8933
+sIP = `hostname -I`[/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/]
+tIP = "10.0.1.1"
+tMac = `arping -c 1 -r #{tIP}`[/..\:..\:..\:..\:..\:../]	#get 10.0.0.1 mac
+sMac = `ip link show eth0`[/..\:..\:..\:..\:..\:../]		#get my mac
+
+ETH_P_ALL = 0x0300      				#socket proto for all types of packet
+							#ruby don't have it, so make one
+sock = Socket.open(:PF_PACKET, :SOCK_RAW, ETH_P_ALL)
+#sock = Socket.open(Socket::PF_PACKET, Socket::SOCK_RAW, ETH_P_ALL)
+#ifreq = [iface.dup].pack'a32'				#build struct ifreq
+#sock.ioctl(SIOCGIFINDEX, ifreq)				#get interface index
+							#unnessary b/c it can be grabbed from
+							#/sys/class/net/eth0/ifindex or
+							#ip link show eth0 (aka interfsce number 2:)
+#sock.bind([Socket::AF_PACKET].pack('s') + [Socket::IPPROTO_RAW].pack('n') + ifreq[16..20] + ("\x00" * 12))
+sockaddr_ll = [Socket::PF_PACKET].pack('S') + [ETH_P_ALL].pack('S') + [ifidx].pack('L') + "\x00" * 12
+#sockaddr_ll = [Socket::PF_PACKET].pack('n') + [ETH_P_ALL].pack('n') + [ifidx].pack('N') + "\x00" * 12
+							#build sockaddr_ll struct
+							#man packet says its a
+							#device independed physical layer address
+sock.bind(sockaddr_ll)
+#pkt = ''.force_encoding('UTF-8')						#start building the packet
+#pkt = ''.force_encoding('ASCII-8BIT')						#start building the packet
+
+ether = ""						#start building the packet
+#ethernet header: tMAC + sMAC + next proto
+ether += tMac.gsub(":","")+sMac.gsub(":","")+"0800"
+#IP : ipv4 20 bytes header + TOS + TIPL + ID + flag and fragment offset + TTL + next proto(icmp)
+ip = ""
+ip += "45"+"00"+"0000"+"0000"+"0000"+"20"+"01"
+#ip += "\x45"+"\x00"+"\x00\x00"+"\x00\x00"+"\x00\x00"+"\x20"+"\x01"
+#+ ip header checksum + sIP + tIP
+ip += "0000"+ sIP.split('.').map{|i| "%02x"%i.to_i}.join + tIP.split('.').map{|i| "%02x"%i.to_i}.join
+#ip += "\x00\x00"+[sIP.split('.').map{|i| "%02x"%i.to_i}.join].pack('H*')+[tIP.split('.').map{|i| "%02x"%i.to_i}.join].pack('H*')
+#icmp: type(request) + code + checksum + ID + seq# + data
+icmp = ""
+icmp += "08"+"00"+"0000"+"0200"+"0100"+"676172626167652121"
+icmp += "00" if icmp.length % 4 != 0
+
+ip[4,4] = "%04x"%[(ip.length + icmp.length)/2]		#calculate and replace total ip length
+
+def checkSum(layer)
+short = ''
+sum = 0
+	layer.each_byte do |e|
+                	short += "%c"%e
+                	if short.size == 4
+                        	#puts"%s"%short
+                        	sum += short.to_i(16)
+                        	if sum.to_s(16).length > 4		#grab 16 overfloq bits
+									#and add them to sum
+                                	twoBytes = sum.to_s(16)[1..-1]
+                                	carry = sum.to_s(16)[0]
+                                	sum = twoBytes.to_i(16) + carry.to_i(16)
+                        	end
+                        	short = '' 
+                	end
+	end
+	return "%04x"%[sum^0xffff]
+end
+ip[4,4] = "%04x"%[(ip.length + icmp.length)/2]		#set TIPL
+ip[20,4] = checkSum(ip)					#set checksum
+icmp[4,4] = checkSum(icmp)				#set checksum
+
+pkt = [ether + ip + icmp].pack('H*')					#reassemble packet
+							#mtu is usually at 1500
+							#16110 is the max this interface allows
+#sock.puts frame
+#sock.flush
+while true			
+	puts"*"*100						#seems the socket can read and send on same socket
+	sock.send(pkt,0)
+	puts"Sent.."
+	puts pkt.to_hexdump
+	puts"-"*100
+	puts"returned.."						#seems the socket can read and send on same socket
+	puts sock.recv(1500).to_hexdump
+	puts"*"*100						#seems the socket can read and send on same socket
+end
+
+#struct sockaddr_ll {
+#              unsigned short sll_family;   /* Always AF_PACKET */
+#              unsigned short sll_protocol; /* Physical-layer protocol */
+#              int            sll_ifindex;  /* Interface number */
+#              unsigned short sll_hatype;   /* ARP hardware type */
+#              unsigned char  sll_pkttype;  /* Packet type */
+#              unsigned char  sll_halen;    /* Length of address */
+#              unsigned char  sll_addr[8];  /* Physical-layer address */
+#          };						#20 bytes size
+							#to bind interface, only need value in first 3
+							#sll_family, sll_protocol, sll_ifindex
+#so bind(sll_family + sll_protocol + sll_ifindex + "\x00" * 12)

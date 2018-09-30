@@ -1,0 +1,142 @@
+dump memory with lime
+https://infosectrek.wordpress.com/2014/02/22/step-by-step-guide-to-using-lime-the-linux-memory-extractor/
+
+#some lime's precompiled LKM can be download from CERT  (centos/redhat/fedora only)
+https://forensics.cert.org
+
+#volatility has no linux profile included bt default, so have to build one for each kernel or download from
+https://github.com/volatilityfoundation/profiles/raw/master/Linux
+#tried Debian8 and it sucked reall bad, and had to make one
+
+----------------------------------------
+#memory dump/analysis on current machine
+#download LiME and compile LKM on local machine
+wget https://github.com/504ensicsLabs/LiME/archive/master.zip
+unzip master.zip
+cd LiME-master/src/
+make
+
+#Memory dump
+#load lime module and dump memory to /root/Desktop/memDump.mem with lime format
+insmod lime-4.6.0-kali1-686-pae.ko "path=/root/Desktop/memDump.mem format=lime"
+
+#check if lime module is loaded
+lsmod | grep lime
+
+#unload lime module
+rmmod lime
+
+#create profile linux profile for volatility
+#needs vType(structure definitions) and System.map (symbols addresses) file
+#or download some ready made at 
+https://github.com/volatilityfoundation/profiles/tree/master/Linux
+
+#vType
+root@kali:/usr/share/volatility/tools/linux# make
+make -C //lib/modules/4.6.0-kali1-686-pae/build CONFIG_DEBUG_INFO=y M="/usr/share/volatility/tools/linux" modules
+make[1]: Entering directory '/usr/src/linux-headers-4.6.0-kali1-686-pae'
+  CC [M]  /usr/share/volatility/tools/linux/module.o
+  Building modules, stage 2.
+  MODPOST 1 modules
+  CC      /usr/share/volatility/tools/linux/module.mod.o
+  LD [M]  /usr/share/volatility/tools/linux/module.ko
+make[1]: Leaving directory '/usr/src/linux-headers-4.6.0-kali1-686-pae'
+dwarfdump -di module.ko > module.dwarf
+make -C //lib/modules/4.6.0-kali1-686-pae/build M="/usr/share/volatility/tools/linux" clean
+make[1]: Entering directory '/usr/src/linux-headers-4.6.0-kali1-686-pae'
+  CLEAN   /usr/share/volatility/tools/linux/.tmp_versions
+  CLEAN   /usr/share/volatility/tools/linux/Module.symvers
+make[1]: Leaving directory '/usr/src/linux-headers-4.6.0-kali1-686-pae'
+
+#System.map
+/boot/System.map-$(uname -r)
+
+create and setup volatility linux profile (zip of both previous files in volatility linux profile folder)
+zip /usr/lib/python2.7/dist-packages/volatility/plugins/overlays/linux/Debian$(uname -r).zip /usr/share/volatility/tools/linux/module.dwarf /boot/System.map-$(uname -r)
+
+#volatility --info should now show the new profile
+LinuxDebian4_6_0-kali1-686-paex86 - A Profile for Linux Debian4.6.0-kali1-686-pae x86
+
+#it seems by default volatility --help will only show window's plugins
+#tell volatility to use a linux profile force it to show linux plugins in --help      
+volatility --profile=LinuxDebian4_6_0-kali1-686-paex86 --help
+
+#get process list
+volatility --profile=LinuxDebian4_6_0-kali1-686-paex86 -f ./memDump.lime linux_pslist
+
+#get all process bash history
+volatility --profile=LinuxDebian4_6_0-kali1-686-paex86 -f ./memDump.lime linux_bash
+
+#only got one open socket
+root@kali:~/Desktop# volatility --profile=LinuxDebian4_6_0-kali1-686-paex86 -f ./memDump.lime linux_netstat | grep UDP
+Volatility Foundation Volatility Framework 2.5
+UDP      0.0.0.0         :   68 0.0.0.0         :  335                          dhclient/640
+
+-----------------------------------------
+#cross compile lime lkm for target kernel and analyze with volatility
+#cross compile LKM for target machine (debian jessie)
+mee@client:~/Desktop$ uname -a
+Linux client 3.16.0-4-amd64 #1 SMP Debian 3.16.36-1+deb8u2 (2016-10-19) x86_64 GNU/Linux
+
+#google for debian jessie source list and update /etc/apt/sources.list
+#clear package management cache
+aptitude clean
+#update package management repository index
+aptitude update
+#now aptitude search linux-headers should include linux-headers-3.16.0-4-amd64
+#install the header
+aptitude install linux-headers-3.16.0-4-amd64
+
+#modify LiME Makefile from compiling LKM for current kernel to the target kernel
+cd /root/Desktop/forensic/LiME-master/src
+
+#KVER ?= $(shell uname -r)
+KVER := 3.16.0-4-amd64
+
+#build the new LiME LKM
+make
+
+#on target machine, from a usb stick dump memory
+#load lime module and dump memory to /root/Desktop/memDump.mem with lime format
+insmod ./lime-4.6.0-kali1-686-pae.ko "path=/media/usb/memDump.mem format=lime"
+
+#tried Debian8 profile from https://github.com/volatilityfoundation/profiles/raw/master/Linux but it sucked really bad
+#make a volatility linux profile
+
+#get System.map-3.16.0-4-amd64
+google for 3.16.0-4-amd64 in debian package site
+#download the kernel version
+wget http://security.debian.org/debian-security/pool/updates/main/l/linux/linux-image-3.16.0-4-amd64_3.16.39-1+deb8u2_amd64.deb
+#create a dir for extraction
+mkdir somedir
+dpkg -x linux-image-3.16.0-4-amd64_3.16.39-1+deb8u2_amd64.deb ./somedir/
+#grab the System.map file
+cp ./somedir/boot/System.map-3.16.0-4-amd64 .
+
+*** get a copy of the /boot/System.map-3.16.0-4-amd64 from the target machine seems to be the best option
+#b/c without it, plugins like linux_cpuinfo or ifconfig returns either nothing or ?????????????
+mee@client:~$ scp /boot/System.map-3.16.0-4-amd64 root@10.0.0.14:/root/Desktop/forensic/
+#volatility works much better with System.map from the target /boot/
+
+
+cd /usr/share/volatility/tools/linux
+#create module.dwarf
+make -C /lib/modules/3.16.0-4-amd64/build CONFIG_DEBUG_INFO=y M=$PWD modules
+dwarfdump -di ./module.o > module.dwarf
+
+#create and setup the profile in volatility
+zip /usr/lib/python2.7/dist-packages/volatility/plugins/overlays/linux/Debian3.16.0-4-amd64.zip module.dwarf /root/Desktop/forensic/System.map-3.16.0-4-amd64
+
+root@kali:~/Desktop/forensic# volatility --profile=LinuxDebian3_16_0-4-amd64x64 -f ./3.16.0-4-amd64-memdump.lime linux_ifconfig
+Volatility Foundation Volatility Framework 2.5
+Interface        IP Address           MAC Address        Promiscous Mode
+---------------- -------------------- ------------------ ---------------
+lo               127.0.0.1            00:00:00:00:00:00  False          
+eth0             10.0.0.19            08:00:27:3f:4b:eb  False          
+lo               127.0.0.1            00:00:00:00:00:00  False 
+
+root@kali:~/Desktop/forensic# volatility --profile=LinuxDebian3_16_0-4-amd64x64 -f 3.16.0-4-amd64-server-memdump.lime linux_cpuinfo
+Volatility Foundation Volatility Framework 2.5
+Processor    Vendor           Model
+------------ ---------------- -----
+0            GenuineIntel     Intel(R) Core(TM) i3 CPU         540  @ 3.07GHz

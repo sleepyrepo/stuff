@@ -1,0 +1,95 @@
+#!/usr/bin/ruby
+
+def checksum(frame)
+  sum = 0
+  short = ''
+  frame += "00" if frame.length % 4 != 0
+  frame.each_byte do |e|
+    short += "%c"%e
+    if short.length == 4
+      sum += short.to_i(16)
+      short = '' 
+    end	
+  end
+  if sum.to_s(16).length > 4
+    sum = sum.to_s(16)[1..-1].to_i(16) + sum.to_s(16)[0].to_i(16)
+  end
+  return "%04x"%[sum^0xffff]
+end
+
+class String					#extend sting class
+def ipChecksum()				#non destructive return frame with udated checksum
+  @sum = 0
+  @org = self.dup				#use doop/clone so org has a copy of self instead of pointing to self
+  @frame = self.dup
+  @short = ''
+  @frame += "00" if @frame.length % 4 != 0
+  @frame.each_byte do |e|
+    @short += "%c"%e
+    if @short.length == 4
+      @sum += @short.to_i(16)
+      @short = '' 
+    end	
+  end
+  if @sum.to_s(16).length > 4
+    @sum = @sum.to_s(16)[1..-1].to_i(16) + @sum.to_s(16)[0].to_i(16)
+  end
+  #return "%04x"%[sum^0xffff]
+  @org[20,4] = "%04x"%[sum^0xffff]
+  return @org				#not sure why destructuve, maybe b/c org = self (nor dup but point to same object instead)
+end
+def ipChecksum!()				#destructive, replace frame with udated checksum
+  @sum = 0
+  @org = self.dup
+  @frame = self.dup
+  @short = ''
+  @frame += "00" if @frame.length % 4 != 0
+  @frame.each_byte do |e|
+    @short += "%c"%e
+    if @short.length == 4
+      @sum += @short.to_i(16)
+      @short = '' 
+    end	
+  end
+  if @sum.to_s(16).length > 4
+    @sum = sum.to_s(16)[1..-1].to_i(16) + @sum.to_s(16)[0].to_i(16)
+  end
+  #return "%04x"%[sum^0xffff]
+  @org[20,4] = "%04x"%[sum^0xffff]
+  replace @org				#replace will change self to the org value, making the destructive
+end
+end
+
+#ipchecksum = ip header in 16 bit chunks with 0000 checksum value, and flip the sum bits ^0xffff
+ip = "4500003894440000401100000a00000a08080808"
+puts "IP Checksum: %s"%checksum(ip)
+puts ip
+puts ip.ipChecksum
+puts ip
+ip.ipChecksum!
+puts ip
+
+#icmp
+icmp = "0800000018030000585b5e480008907a08090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637"
+puts "ICMP Checksum: %s"%checksum(icmp)
+
+#tcp checksum = psudo header + tcp header + data in 16 bits chunks with 0000 checksum value
+#psudo header = srcAddr + dstAddr + \x00(reserved) + \x06(TCP opcode) + tcp length(heade + data)
+#**padd tcp segment with \x00 when calculate if they all can not be grouped into 2 bytes
+
+tcp = "c41400504156b05300000000b002ffff00000000020405b4010303050101080a1746fcad0000000004020000"
+sip = "10.0.0.10".split(".").map{|i| "%02x"%i.to_i}.join
+tip = "184.28.188.74".split(".").map{|i| "%02x"%i.to_i}.join
+frame = sip + tip + "0006" + "%04x"%[tcp.length / 2] + tcp
+puts "TCP Checksum: %s"%checksum(frame)
+	
+#udp checksum = psudo header + udp header, sum data in 16 bits chunks with 0000 checksum value
+#psudo header = srcAddr + dstAddr + \x00(reserved) + \x11(UDP opcode) + udp length(value form udp header)
+#**padd udp segment with \x00 when calculate if they all can not be grouped into 2 bytes
+
+udp = "f552003500240000c99b0100000100000000000006676f6f676c6503636f6d0000010001"
+sip = "10.0.0.10".split(".").map{|i| "%02x"%i.to_i}.join
+tip = "8.8.8.8".split(".").map{|i| "%02x"%i.to_i}.join
+#frame = sip + tip + "0011" + udp[8,4] + udp
+frame = sip + tip + "0011" + "%04x"%[udp.length / 2] + udp
+puts "UDP Checksum: %s"%checksum(frame)

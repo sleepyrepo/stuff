@@ -1,0 +1,102 @@
+
+BITS 32
+
+;get ntdll and kernel32
+xor ebx, ebx          		
+mov ebx, dword [fs:0x30]      		;grab PEB from TEB
+mov ebx, dword [ebx + 0x0c]   		;Ldr link list
+mov ebx, dword [ebx + 0x0c]   		;InLoadedOrderModuleList
+mov ebx, dword [ebx]   		;InLoadedOrderModuleListprocess.Flink (process image) 
+mov ebx, dword [ebx]          		;InLoadedOrderModuleList.FLINK (ntdll)
+mov ebx, dword [ebx + 0x18]		;kernel32 base
+push ebx				;save kernel32 base
+
+;get export table address
+mov edi, ebx				;kernelBase
+mov esi, [edi + 0x3c]			;get RVA to ntHeader
+mov esi, [edi + esi + 0x78]		;get RVA to exportTable (first entry of IMAGE_DIRECTORY)
+push esi				;save exportTable RVA
+
+;find GetProcAddress index into ordinalTable from namePointerTable(4 byte pointer array) 
+mov esi,[edi + esi + 0x20]		;get RVS to namePointerTable(array of pointer to function name)
+add esi, edi				;namePointerTable address
+xor ecx, ecx				;setup for loadsd esi to eax
+findGetProcAddress:
+  inc ecx				;start function index(ordinal) count
+  lodsd					;move function name pointer RVA from esi to eax, inc esi by 4
+  add eax, edi				;get address of function name pointer
+  cmp dword [eax], 0x50746547		;check first 4 char "PteG"
+  jne findGetProcAddress
+  cmp dword [eax + 0x4], 0x41636f72	;check next 4 "Acor"
+  jne findGetProcAddress
+  cmp dword [eax + 0x8], 0x65726464	;check next 4 "erdd"
+  jne findGetProcAddress		;if found ecx should have the ordinal number for GetProcAddress
+
+;find GetProcAddress index into addressTable from ordinalTable(2 byte array)
+mov esi, [esp]				;retrieve exportTableRVA
+mov esi, [edi + esi + 0x24]		;get RVA to ordinalTable
+add esi, edi				;ordinalTable address
+dec ecx					;set index to start from 0
+mov cx, [esi + ecx * 2]		;grab GetProcAddress index into addressTable (2 bytes)
+
+;get getProcAddress from addressTable (4 byte array)
+pop esi					;retrieve exportTableRVA
+mov esi, [edi + esi + 0x1c]		;get RVA to addressTable
+add esi, edi				;get addressTable Address
+mov esi, [esi + ecx * 4]		;get RVA of getProcAddress from index (4 byte each)
+add esi, edi				;getProcAddress
+push esi				;save getProcAddress
+
+;get loadLibrary address
+mov eax, esi
+jmp loadLibraryA			;arg2 grab LoadLibraryA string address			
+cont1:
+  push edi				;arg1 kelnel32 base (hModule)
+  call eax				;invoke getProcAddress(kernel32Base, "LoadLibraryA")
+  push eax				;save loadLibrary address
+
+;get user32.dll
+jmp user32				;arg1 grab user32.dll string address
+  cont2:
+  call eax				;invoke LoadLibraryA("User32.dll")
+
+;get messageBoxA
+jmp messageBoxA				;arg2 grab MessageBoxA string address
+  cont3:
+  push eax				;user32 base (hModule)
+  call esi				;invoke GetProcAddress(user32Base, "MessageBoxA")
+
+;pop a mesageBox
+xor ecx, ecx
+push ecx				;arg4 NULL
+jmp message				;grab message to print
+cont4:
+  pop ecx
+  push ecx				;arg3 TITLE
+  push ecx				;arg2 Caption
+  xor ecx, ecx
+  push ecx				;arg1 NULL
+  call eax				;invoke MessageBoxA(NULL, "Bla!!", "Bla!!", NULL)
+
+ret
+
+loadLibraryA:
+  call cont1
+  db "LoadLibraryA", 0x00
+user32:
+  call cont2
+  db "User32.dll", 0x00
+messageBoxA:
+  call cont3
+  db "MessageBoxA", 0x00
+message:
+  call cont4
+  db "Bla!!", 0x00
+
+;Good reading on this stuff
+
+;Understanding the PEB Loader Data Structure
+;http://sandsprite.com/CodeStuff/Understanding_the_Peb_Loader_Data_List.html
+
+;Introduction to Windows shellcode development – Part 3
+;https://securitycafe.ro/2016/02/15/introduction-to-windows-shellcode-development-part-3/

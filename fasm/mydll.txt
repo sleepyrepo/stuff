@@ -1,0 +1,135 @@
+format PE console 4.0 DLL
+entry DllEntryPoint
+
+include 'win32axp.inc'
+
+section '.text' code readable executable
+
+	proc DllEntryPoint hinstDLL,fdwReason,lpvReserved
+	     mov eax, 1
+	     ret
+	endp
+
+	proc one
+	     invoke MessageBox, 0, "Proc 1 runing!!", "mydll", 0
+	     ret
+	endp
+
+	proc two
+	     invoke MessageBox, 0, "proc 2 running!!", "mydll", 0
+	     ret
+	endp
+
+	proc three
+	     ;invoke RtlZeroMemory, shellInfo, sizeof.SHELLEXECUTEINFO	-- zero out memory at address
+	     mov [shellInfo.cbSize], sizeof.SHELLEXECUTEINFO
+	     mov [shellInfo.hwnd],0
+	     mov [shellInfo.fMask],0x100;0x40			      ;SEE_MASK_NOCLOSEPROCESS, so handle is sent to hProcess
+	     mov [shellInfo.lpFile], app
+	     mov [shellInfo.lpParameters], 0
+	     mov [shellInfo.lpDirectory], 0;dir
+	     mov [shellInfo.nShow], 0				 ;for SW_SHOW, 0 SW_HIDE
+	     mov [shellInfo.lpVerb], runas			 ;run program as admin
+	     invoke ShellExecuteEx, shellInfo
+	     ret
+	endp
+	proc four
+	     invoke RtlAdjustPrivilege, 20, 1, 0, privOut	 ;really get SeDebugPrivilege
+								 ;but need privOut to write to
+								 ;or get access violation for writing to 0x000000
+	     invoke OpenProcess, PROCESS_ALL_ACCESS, 0, [victimPid]
+	     mov [rpHandle], eax
+
+	     invoke VirtualAllocEx, [rpHandle], 0,dword dllLen, MEM_COMMIT, PAGE_READWRITE;dont really need PAGE_EXECUTE_READWRITE
+	     mov [rAddr], eax
+	     invoke WriteProcessMemory, [rpHandle], [rAddr], dllPath, dllLen, 0
+	     invoke CreateRemoteThread, [rpHandle], 0, 0, [LoadLibrary], [rAddr], 0, rtHandle  ;dll is loaded by victim
+	     invoke Sleep, 1000 						  ;sleep, and wait for dll load to catchup
+	     invoke CreateRemoteThread, [rpHandle], 0, 0, dword [one], 0, 0, rtHandle	     ;now call proc one
+	     ;invoke CreateRemoteThread, [rpHandle], 0, 0, [two], 0, 0, rtHandle	;now call proc two
+	     ;invoke CreateRemoteThread, [rpHandle], 0, 0, [four], 0, 0, rtHandle	 ;now call proc two
+	     ;invoke LoadLibrary, dllPath
+	     ;mov [mDllHandle], eax
+	     ;invoke CreateRemoteThread, [rpHandle], 0, 0, [FreeLibrary], [mDllHandle], 0, rtHandle ;unload dll from target
+	     invoke CloseHandle, [rtHandle]
+	     invoke CloseHandle, [rpHandle]
+	     invoke MessageBox, 0, "test", "test", 0
+	     ;invoke ExitProcess, 0
+	     ret
+	endp
+	proc five
+	    invoke CopyFile, src, dst, 0
+	    ret
+	endp
+
+section '.data' data readable writable
+;---------------------------proc three variables
+app db 'C:\Windows\System32\calc.exe',0
+src db 'C:\Users\mee\Desktop\fasmAssembly\DLL\mydll.dll',0
+dst db 'C:\Windows\mydll.dll',0
+struct SHELLEXECUTEINFO
+  cbSize       dd ?
+  fMask        dd ?
+  hwnd	       dd ?
+  lpVerb       dd ?
+  lpFile       dd ?
+  lpParameters dd ?
+  lpDirectory  dd ?
+  nShow        dd ?
+  hInstApp     dd ?
+  lpIDList     dd ?
+  lpClass      dd ?
+  hkeyClass    dd ?
+  dwHotKey     dd ?
+  union
+	hIcon	     dd ?
+	hMonitor     dd ?
+  ends
+  hProcess     dd ?
+ends
+
+shellInfo SHELLEXECUTEINFO
+runas db 'runas',0
+;----------------------------proc four variable
+dllPath db 'C:\Users\mee\Desktop\fasmAssembly\DLL\mydll.dll',0x00
+dllLen = $ - dllPath
+victimPid dd 1336
+privOut rd 1
+rpHandle rd 1
+rAddr rd 1
+rtHandle rd 1
+
+section '.edata' export data readable
+	export 'mydll.dll',\
+	one, 'one',\
+	two, 'two',\
+	three,'three',\
+	four,'four',\
+	five,'five'
+
+section 'idata' import data readable
+
+library user,'USER32.DLL',\
+	kernel,'KERNEL32.DLL',\
+	ntdll,'NTDLL.DLL',\
+	shell32,'SHELL32.DLL'
+
+import shell32,ShellExecuteEx,'ShellExecuteEx'
+
+import user, \
+       MessageBox,'MessageBoxA'
+
+import kernel, OpenProcess,'OpenProcess',\
+	       VirtualAllocEx,'VirtualAllocEx',\
+	       WriteProcessMemory,'WriteProcessMemory',\
+	       LoadLibrary,'LoadLibraryA',\
+	       CreateRemoteThread,'CreateRemoteThread',\
+	       CloseHandle,'CloseHandle',\
+	       Sleep,'Sleep',\
+	       CopyFile,'CopyFileA'
+
+
+import ntdll, RtlAdjustPrivilege,'RtlAdjustPrivilege'
+
+section '.reloc' fixups data readable discardable ;seems reloc section is needed
+						  ;or it wont able to relocate to another address when load

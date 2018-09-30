@@ -1,0 +1,82 @@
+#!/usr/bin/perl -w
+
+use Net::Pcap;
+use NetPacket::Ethernet;				#parse raw packet frame
+use NetPacket::IP;					#for IP
+use NetPacket::ARP;					#for ARP
+
+my $err ="";
+print Net::Pcap::lookupdev(\$err) . "\n";		#look up usable interface name, $err = return error msg
+my $dev = "eth0";
+my $pcapfd = Net::Pcap::open_live($dev, 1500, 0, 0, \$err); #return fd to a packet capture interface
+#(iface, bytes_to_capture, promisc, read_timeout, error_message); 0 = till error, -1 forever
+
+#Net::Pcap::open_offline for read pcap file
+
+sub process_pkt {					#sub used to parse the packet
+  my ($user, $headers, $pkt) = @_;			#sub args(user_misc_data, layer_2_device_captuer_data, packet)
+							#$header is a reference to hash, so use ->{}  
+  print $user . "\n";
+  print "\nHeader Info\n";
+  printf("pktTotalLen: %i\n",$headers->{len});
+  printf("captureLen: %i\n", $headers->{caplen});
+  printf("sec: %i\n", $headers->{tv_sec});
+  printf("msec: %i\n", $headers->{tv_usec});
+  print unpack("H*",$pkt) . "\n";
+
+  print "\nLayer2\n";
+  my $ether = NetPacket::Ethernet->decode($pkt);
+  printf("TMAC: %s\n", $ether->{dest_mac});
+  printf("SMAC: %s\n", $ether->{src_mac});
+  printf("nextProto: %04x\n", $ether->{type});
+  printf("data: %s\n", unpack("H*",$ether->{data}));
+  my $layer3 = $ether->{data};				#return ethernet data(layer3), pass on to other module
+							#same as my $layer3 = NetPacket::Ethernet::strip($pkt);
+  my $nextProto = $ether->{type};
+
+  if ($nextProto == 0x0800) {
+    print "\nLayer3 IP\n";
+    my $ip = NetPacket::IP->decode($layer3);
+    printf("version: 0x%x\n",$ip->{ver});
+    printf("headerLen: 0x%x\n",$ip->{hlen});
+    printf("totalLen: 0x%x\n",$ip->{len});
+    printf("ttl: 0x%x\n",$ip->{ttl});
+    printf("nextProto: 0x%02x\n",$ip->{proto});
+    printf("src_ip: %s\n",$ip->{src_ip});
+    printf("dest_ip: %s\n",$ip->{dest_ip});
+    printf("data: %s\n",unpack("H*",$ip->{data}));
+  }
+
+  if ($nextProto == 0x0806) {
+    print "\nLayer3 ARP\n";
+    my $arp = NetPacket::ARP->decode($layer3);
+    printf("hardwareType: 0x%04x\n",$arp->{htype});
+    printf("protoType: 0x%04x\n",$arp->{proto});
+    printf("hardwareLen: 0x%02x\n",$arp->{hlen});
+    printf("protoLen: 0x%02x\n",$arp->{plen});
+    printf("opcode: 0x%04x\n",$arp->{opcode});		#1 request, 2 reply
+    printf("SMAC: 0x%s\n",$arp->{sha});
+    printf("SIP: 0x%s\n",$arp->{spa});
+    printf("TMAC: 0x%s\n",$arp->{tha});
+    printf("TIP: 0x%s\n",$arp->{tpa});
+  }
+  print "+"x100 . "\n";
+  
+}
+#loop through the packet capture(packet_fd, number_of_packet_to_capture, sub_routine, user_misc_data)
+Net::Pcap::loop($pcapfd, -1, \&process_pkt, "i m just somedata?");
+Net::Pcap::close($pcapfd);
+
+=begin
+cpan -l | grep -i packet
+NetPacket	1.6.0
+NetPacket::ARP	1.6.0
+NetPacket::UDP	1.6.0
+NetPacket::TCP	1.6.0
+NetPacket::ICMP	1.6.0
+NetPacket::IPX	1.6.0
+NetPacket::IGMP	1.6.0
+NetPacket::IP	1.6.0
+NetPacket::USBMon	1.6.0
+NetPacket::Ethernet	1.6.0
+=end

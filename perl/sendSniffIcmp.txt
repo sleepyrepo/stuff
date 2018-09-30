@@ -1,0 +1,37 @@
+#!/usr/bin/perl -w
+
+use Net::RawIP;
+
+#normal icmp
+my $rip = Net::RawIP->new({                             #build ip packet with normal icmp request for eth1
+  ip=>{saddr=>"10.0.0.100", daddr=>"10.0.0.1"},
+  icmp=>{type=>8, data=>"super secret sauce!!"}
+});
+
+my $pcap = $rip->pcapinit("eth0","ip proto \\icmp", 1500, 0);
+							#create pcap fd with filter string on icmp
+if(fork){						#fork sniffer
+  loop($pcap, -1, sub{ my (undef,undef,$pkt) = @_; print "<-- " . substr(unpack("H*",$pkt),28)."\n";}, undef);
+							#indirectly call net::pcap->loop
+}
+
+while(1){						#loop send
+  print "--> " . unpack("H*",$rip->packet) . "\n";
+  $rip->send;
+  sleep(5);
+}
+
+=begin
+Net::RawIP->new({
+              ARGPROTO => {PROTOKEY => PROTOVALUE,...}
+              ip       => {IPKEY => IPVALUE,...}
+      })
+ARGPROTO -> (tcp, udp, icmp, generic), Defaults to tcp.
+
+You can NOT change protocol in the object after its creation.
+Unless you want your packet to be TCP, you must set the protocol type in the new() call.
+tcp -> (source, dest, seq, ack_seq, doff, res1, res2, urg, ack, psh, rst, syn, fin, window, check, urg_ptr, data).
+icmp -> (type, code, check, gateway, id, sequence, unused, mtu, data).
+udp -> (source, dest, len, check, data)
+generic -> PROTOKEY can be data only.
+=end

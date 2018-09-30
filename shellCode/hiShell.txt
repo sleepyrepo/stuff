@@ -1,0 +1,26 @@
+BITS 32
+
+pusha                   ;save all register on to stack
+xor eax, eax
+xor ebx, ebx
+xor ecx, ecx
+xor edx, edx
+xor esi, esi
+;write(int fd, char *msg, unsigned int len)
+
+call main               ;just do relative jmp and push string address onto stack
+                        ;no fancy call/jmp back/forth
+db 'Hi, SHELL!!'
+
+main:
+pop ecx                 ;got string address
+mov al, 4               ;sys write
+mov bl, 1               ;to STDOUT
+mov dl, 12              ;string length
+int 0x80                ;do it!!
+
+popa                    ;return all register
+
+mov eax,1               ;exit process
+xor ebx, ebx
+int 0x80

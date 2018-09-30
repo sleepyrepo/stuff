@@ -1,0 +1,69 @@
+#!/usr/bin/perl -w
+
+use Net::RawIP;
+
+sub getPacketDetail{
+  my ($rip, $title) = @_;
+  my ($version, $ttl, $protocol, $saddr, $daddr, $type, $code, $data) = $rip->get({
+							#get return data inthe ip object
+    ip=>[qw(version ttl protocol saddr daddr)],		#item to return from ip 
+    icmp=>[qw(type code data)]				#item to return from icmp key
+  });
+  printf("\n%s\nversion:%s\nttl:%s\nprotocol:%s\nsaddr:%x\ndaddr:%x\ntype:%s\ncode:%s\ndata:%s\n",
+  $title, $version, $ttl, $protocol, $saddr, $daddr, $type, $code, $data);
+}
+
+#normal icmp
+my $rip = Net::RawIP->new({				#build ip packet with normal icmp request for eth1
+  ip=>{saddr=>"10.0.0.9", daddr=>"10.0.0.1"},
+  icmp=>{type=>8, data=>"super secret sauce!!"}
+});
+$rip->ethnew("eth1");					#set tMAC to eth1 MAC
+							#default to eth0
+$rip->ethsend;						#send it out using the settings in ethnew
+							#$rip->send works too but it'll use OS's eth frame
+getPacketDetail($rip,"normal icmp");
+
+#icmp with spoof sip
+$rip = Net::RawIP->new({
+  ip=>{saddr=>"10.0.0.254", daddr=>"10.0.0.1"},
+  icmp=>{type=>8, data=>"ping layer2 broadcas??"}
+});
+
+#$rip->ethnew("eth0");					#works too
+#$rip->ethset(dest=>"ff:ff:ff:ff:ff:ff");
+$rip->ethnew("eth1", dest=>"ff:ff:ff:ff:ff:ff");	#set sMAC to eth1 and tMAC to broadcast 
+#print unpack("H*",$rip->packet)."\n";			#returns layer 3 and above packet'
+$rip->ethsend;
+getPacketDetail($rip,"icmp with spoof sip");
+
+
+#ARP, not supported but can be done
+$rip = new Net::RawIP;
+$rip->ethnew("eth1", dest=>"ff:ff:ff:ff:ff:ff");	#set sMAC to eth1 and tMAC to broadcast 
+#build ARP layer
+#hw type(2) + proto(2) + HW size + proto size + opcode(2) + sIP(4) + sMAC(6) + tIP(4) + tMAC(6)
+my $arp ="0001"."0800"."06"."04"."0001"."000c295798b6"."0a000063"."000000000000"."0a000001";
+my $ether = "0806";					#part of eth header we have to make
+my $pkt = pack("H*", $ether . $arp);			#build the packet
+$rip->send_eth_frame($pkt."arp secret sauce??");				#send the frame to wire
+
+my($dest, $source) = $rip->get({			#get frame address info
+  eth=>[qw(dest source)]
+});
+printf("\nARP, not supported but can be done\ndes:%s\nsource:%s\nproto:%s\ndata:%s\n",unpack("H*",$dest), unpack("H*",$source), $ether, $arp);
+
+=begin
+Net::RawIP->new({
+              ARGPROTO => {PROTOKEY => PROTOVALUE,...}
+              ip       => {IPKEY => IPVALUE,...}
+      })
+ARGPROTO -> (tcp, udp, icmp, generic), Defaults to tcp.
+
+You can NOT change protocol in the object after its creation.
+Unless you want your packet to be TCP, you must set the protocol type in the new() call.
+tcp -> (source, dest, seq, ack_seq, doff, res1, res2, urg, ack, psh, rst, syn, fin, window, check, urg_ptr, data).
+icmp -> (type, code, check, gateway, id, sequence, unused, mtu, data).
+udp -> (source, dest, len, check, data)
+generic -> PROTOKEY can be data only.
+=end

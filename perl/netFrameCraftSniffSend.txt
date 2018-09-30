@@ -1,0 +1,46 @@
+
+#!/usr/bin/perl -w
+#install all Net::Frame related
+#capn
+#install /Net::Frame/
+
+use Net::Frame::Layer::IPv4;					#ipv4 layer
+use Net::Frame::Simple;						#combine different layers	
+use Net::Frame::Layer::ICMPv4;					#icmp object
+use Net::Frame::Layer::ICMPv4::Echo;				#echo type
+use Net::Frame::Layer::ETH;					#ethernet layer
+use Net::Write::Layer2;						#write to layer 2
+use Net::Write::Layer3;						#write to layer 3
+use Net::Frame::Dump::Online2;					#sniffer non block/buffer
+
+my $echo = Net::Frame::Layer::ICMPv4::Echo->new(payload=>"super secret sauce :D!!!");
+my $icmp = Net::Frame::Layer::ICMPv4->new(type=>8, code=>0, checksum=>0);
+my $ip = Net::Frame::Layer::IPv4->new(src=>"10.0.0.100", dst=>"10.0.0.1", protocol=>0x01);
+#my $ether = Net::Frame::Layer::ETH->new(src=>"00:0c:29:57:98:b6", dst=>"c8:b3:73:21:3b:08", type=>0x0800);
+#my $pkt = Net::Frame::Simple->new(layers=>[ $ether, $ip, $icmp, $echo ] );
+my $pkt = Net::Frame::Simple->new(layers=>[ $ip, $icmp, $echo ] );
+
+print $pkt->print."\n";						#output human readable packet detail
+print "-"x80 . "\n";
+
+if(fork){				
+  #my $wLayer = Net::Write::Layer2->new(dev=>"eth0");		#instantiate interace to write to layer2
+  my $wLayer = Net::Write::Layer3->new(dst=>"10.0.0.1");	#instantiate interace to write to layer3
+  $wLayer->open;						#open interface to send
+  while(1){
+    print "-->".$pkt->dump."\n";				#dump packet in hex
+    $wLayer->send($pkt->pack);					#pacl all layers ready to be send
+    sleep(5);
+  }
+}
+
+my $dOnline = Net::Frame::Dump::Online2->new(dev=>"eth0", filter=>"icmp");	
+								#instantiate interfece to sniff non block(online2)
+								#with filter icmp
+$dOnline->start;						#start sniffing interface 
+while(1){
+  if(my $f = $dOnline->next){					#if next packet not null
+    print "<--".unpack("H*", $f->{raw})."\n";			#unpack raw received packet
+  }
+}
+

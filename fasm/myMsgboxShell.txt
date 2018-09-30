@@ -1,0 +1,56 @@
+
+BITS 32
+        xor ebx, ebx            	;clear ebx
+        mov ebx, dword [fs:30h]        	;get TEB.Peb
+        mov ebx, dword [ebx + 0ch]      ;get PEB.Ldr
+        mov ebx, dword [ebx + 14h]      ;get LDR.InMemoryOrderModuleList (order in which DLL appears in memory layout)
+        mov ebx, dword [ebx]            ;get InMemoryOrderModuleList.Flink
+        mov ebx, dword [ebx]            ;get InMemoryOrderModuleList.Flink.Flink, get 3rd entry based address (Kernel32.dll)
+        mov ebx, dword [ebx + 10h]      ;jump over 
+					;InMemoryOrderModuleList[Flink, Blink] + 
+					;InInitializationOrderModuleList[Flink, Blink]+
+					;DllBase		
+                                        ;use dll base addres to walk it's structure to find
+                                        ;the function needed
+
+	mov esi, ebx                    ;save Kernel32.dll address into esi
+	add esi, 0x52864                ;get loadLibraryA address by adding its offset to kernel32.dll address
+                                        ;the offset can be found with Peview c:\windows/system32\kernel32.dll
+                                        ;under Section .Text->Export address Table->LoadLibraryA DATA
+	jmp User32			;grab argument fot passing into LoadLibraryA                                                     
+
+getUser32Lib:
+			                ;setup stack for LoadLibrary to find address of USer32.dll
+	call esi                        ;call LoadLibrary for user32.dll
+                                        ;noe eax should have the base address of User32.dll
+	add eax, 0x5ea71                ;get MEssageBoxA address with the same way we did with
+                                        ;KErnel32.dll->LoadLibraryA
+                                        ;but use PEview on c:\windows\system32\user32.dll
+
+	push dword 0                    ;setup stack for MessageBox
+	jmp String			;grab sting to print
+continue:
+	pop ecx				;get string address
+	push ecx			;set argument in stack
+	push ecx	
+	push dword 0
+	call eax                       	;call messageBox
+	;mov ebx, esi
+	;add ebx, 0x52acf               ;get ExirProcess, 0x52acf + kernl32.dll = exitProcess
+	;add ebx, 0xbee62		;get ExitThread, 0xbee62 + kernl32.dll = exitThread
+	;add ebx, 0x52de5		;get TerminatThread, 
+	;push dword 0
+	;call ebx
+	ret				;just return, try to exit or terminate will just kill the main thread
+						
+User32:
+	call getUser32Lib		;push next instruction onstack and jump back(call)
+	user32 db 'User32.dll', 0x00                               
+String:					;push next instruction onstack and jump back(call)
+	call continue
+	string db 'myMsgBox Thread...', 0x00
+
+;to get shellcode just assemble with nasm -f bin .\thisfile -o shellcode.file
+
+
+

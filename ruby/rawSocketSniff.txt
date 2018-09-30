@@ -1,0 +1,104 @@
+#!/usr/bin/ruby
+
+#aptitude install zhexdump
+require'zhexdump'				#for hexdumping packets
+require'socket'
+
+#PF_PACKET = 17	
+#ETH_P_ALL = 0x0300 -> all types of packet
+
+#p Socket.ip_address_list				#get local IPs, MAC, iface
+
+rsock = Socket.new(Socket::AF_PACKET,Socket::SOCK_RAW, 0x0300)	#Socket.new(Family, type, protocol )
+#from man socket -> Socket(Family/domain, type, protocol )
+#AF_PACKET read from layer 2
+#AF (address family) = PF (protocal family)
+#packet type -> SOCK_STREAM, SOCK_RAW, SOCK_RAW/SOCK_PACKET, SOCK_DGRAM
+#SOCK_RAW -> raw network protocol access
+#	p  rsock.recvfrom(1024)[0].unpack('H*')
+#	p = rsock.recv(1024).unpack("H*")[0]
+while true
+	puts"-"*100
+	puts rsock.recv(1500).to_hexdump
+end
+
+=begin
+def arp(p)
+	puts"ProtoType: ARP"
+	puts"Opcode: 0x%s"%[p[20..21].unpack("H*")[0]]
+	puts"SMAC: %s"%[p[22..27].unpack("C*").map{|x|"%02x"%[x]}.join(":")]
+	puts"SIP: %s"%[p[28..31].unpack("C*").join(".")]
+	puts"TMAC: %s"%[p[32..37].unpack("C*").map{|x|"%02x"%[x]}.join(":")]
+	puts"TIP: %s"%[p[38..41].unpack("C*").join(".")]
+end
+def icmp(p)
+	puts"ProtoType: ICMP"
+	puts"Type: 0x%s"%[p[34].unpack("H*")[0]]	
+	puts"Code: 0x%s"%[p[35].unpack("H*")[0]]
+	data = p[38..p.length-1]
+	puts"Data hex: %s"%[data.unpack("H*")[0]]
+	puts"Data ascii: %s"%[data]
+end
+def tcp(p)
+	puts"ProtoType: TCP"
+	puts"SPORT: %s"%[p[34..35].unpack("n")[0]]
+	#unpack("n") = 16 bit int big endian(network)
+	puts"DPORT: %s"%[p[36..37].unpack("n")[0]]
+	puts"SEQ Number: 0x%s"%[p[38..41].unpack("H*")[0]]
+	puts"ACK Number: 0x%s"%[p[42..45].unpack("H*")[0]]
+	flagBits = p[47].unpack("B*")[0].split("")
+	#p flagBits
+	flagVal = ["CWR", "ECN", "U", "Ack", "Push", "Rst", "Syn", "Fin"]	
+	print"Flags: "
+	flagBits.each_with_index{ |v,k| print"%s "%[flagVal[k]] if v != "0"}
+	puts""
+	
+end
+def udp(p)
+	puts"ProtoType: UDP"
+	puts"SPORT: %s"%[p[34..35].unpack("n")[0]]
+	#unpack("n") = 16 bit int big endian(network)
+	puts"DPORT: %s"%[p[36..37].unpack("n")[0]]
+	puts"Msg Length: %s"%[p[38..39].unpack("n")[0]]
+	puts"Msg Hex: %s"%[p[42..p.length-1].unpack("H*")[0]]
+	puts"Msg ascii: %s"%[p[42..p.length-1]]
+end
+def ipv4(p)
+	puts"ProtoType: IP"
+	puts"Version: %s"%[p[14].unpack("H*")[0][0]]
+	puts"IP Header Length: %s"%[p[14].unpack("H*")[0][1].to_i(16) * 4]
+	puts"Total IP Length: %s"%[p[16..17].unpack("H*")[0].to_i(16)]
+	puts"TTL: %s"%[p[22].unpack("C")[0]]
+	nextProto = p[23].unpack("C")[0]
+	puts"NextProto: 0x%02x"%[nextProto]
+	puts nextProto
+	icmp(p) if nextProto == 0x01
+	tcp(p) if nextProto == 0x06
+	udp(p) if nextProto == 0x11
+
+	
+end
+def ipv6(p)
+	puts"ProtoType: IPv6"
+end
+
+p Socket.getifaddrs
+while true
+puts"*"*100
+	packet = rsock.recv(1024)
+	puts"TMAC: %s"%[packet[0..5].unpack("C*").map{|x|"%02x"%[x]}.join(":")]
+	#unpack("C*") will split bytes and convert to array of unsigned int
+	puts"SMAC: %s"%[packet[6..11].unpack("C*").map{|x|"%02x"%[x]}.join(":")]
+	puts"ProtoType: 0x%s"%[packet[12..13].unpack("H*")[0]]
+	if packet[12..13].unpack("H*")[0] == "0806"		#if ARP proto 0806
+		arp(packet)	
+	elsif packet[12..13].unpack("H*")[0] == "0800"		#if ARP proto 0806
+		ipv4(packet)
+	elsif packet[12..13].unpack("H*")[0] == "86dd"
+		ipv6(packet) 
+	else 
+		puts"Unknown Proto, Exiting.."
+		exit
+	end
+end
+=end

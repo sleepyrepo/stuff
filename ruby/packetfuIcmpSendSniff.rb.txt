@@ -1,0 +1,53 @@
+#!/usr/bin/ruby
+
+require"packetfu"
+#mudule PacketFu, Class Utils, method whoami?
+#puts PacketFu::Utils.whoami?		#find local IP, and ethernet addresses TMAC, SMAC
+					#VERY NOISY, send out a UDP to grab MAC of target from a ICMP respone
+					#make matter worse, UDP payload even says packetfu whoami?
+#to fix this, change the following. After there will still be a UDP going out but witout the signature 
+#msg = "PacketFu whoami? packet #{(Time.now.to_i + rand(0xffffff)+1)}"
+#msg = ""
+#line 131 in /var/lib/gems/2.3.0/gems/packetfu-1.1.13/lib/packetfu/utils.rb
+
+iface = "eth0"
+target = "10.0.0.5"
+#target = "10.1.1.12"
+config = PacketFu::Utils.whoami?(:iface=>iface, :target=>target)
+					#set interface, SAMC amd TAMC
+					#if eth0 and eth1 is on the same subnet, 
+					#fitst deveice from decive lookup will prevail 
+icmp = PacketFu::ICMPPacket.new(:config=>config)
+					#nre ICMP object with built ether net header
+icmp.ip_daddr = target			#set TIP
+icmp.icmp_type = 8			#echo request
+icmp.payload = "secret sauce :P..."	#some payload
+icmp.recalc				#calculate all checksum
+#puts icmp.inspect
+#p icmp.proto				#show packet layers
+#puts icmp.peek				#show tcp dump brief view
+#puts icmp.inspect_hex			#shoe hexdump
+
+toWire = fork do			#use fork instead of thread b/c ruby MRI does not do Parallelism
+  	   loop do 
+	     icmp.to_w(iface)		#send to interface
+  	     sleep(2)
+	   end
+end
+
+cap = PacketFu::Capture.new(:iface=>"eth0",:filter=>"icmp",:start=>true)
+					#sniff on eth0, filter only icmp, start now
+cap.show_live				#show peek data from capture
+
+wait(toWire)				#wait for child to exit
+#waitall				#wait for all fork child process to exit
+					#SIGINT(Ctrl-c) will interupt both parent and child
+=begin
+cap.stream.each do |pkt| 		#get raw packet capture
+  parsed = PacketFu::Packet.parse(pkt)	#parse raw packets into objects
+  p parsed				#same as puts parse.inspect
+  direction =  parsed.eth_src == PacketFu::Utils.whoami?[:eth_src]? "--> " : "<-- "
+					#just making it fancy :P
+  puts "%s %s"%[direction, pkt.unpack("H*")[0]]
+end
+=end

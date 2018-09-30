@@ -1,0 +1,64 @@
+#!/usr/bin/ruby
+
+#gem install zhexdump
+require "zhexdump"
+require"socket"
+
+def checksum(frame)
+	sum = 0
+	short = ''
+	frame += "00" if frame.length % 4 != 0
+	frame.each_byte do |e|
+		short += "%c"%e
+		if short.length == 4
+			sum += short.to_i(16)
+			short = '' 
+		end	
+	end
+	if sum.to_s(16).length > 4
+		sum = sum.to_s(16)[1..-1].to_i(16) + sum.to_s(16)[0].to_i(16)
+	end
+
+	return "%04x"%[sum^0xffff]
+end
+
+iface = "eth0"
+tIp = "10.0.0.1"
+sock = Socket.new(Socket::PF_INET, Socket::SOCK_RAW, Socket::IPPROTO_RAW)	
+							#(family, type, protocol) 
+							#PF_INET -> ipv4
+							#SOCK_RAW -> uncook packets(I'll do some or all layers)
+							#IPPTOTO_RAW -> raw IP  
+							#other useful types -> IPPROTO_UDP, IPPROTO_TCP, IPPROTO_ICMP
+
+sIp = Socket.getifaddrs.select{ |ifa| ifa.name == iface && ifa.addr.ipv4? }[0].addr.ip_address
+							#grab interface ip where name = eth0 and has ipv4 address
+
+saddr = Socket.sockaddr_in(65534, sIp)		#source socket so OS knows which MAC to use 
+							#for building ethernet heade
+taddr = Socket.sockaddr_in(161, tIp)			#target socket
+
+sock.bind(saddr)					#trll OS to use sMAC from this IP
+
+#build ICMP -> type(request) + code + checksum + ID + seq# + data
+icmp = ""
+icmp += "08"+"00"+"0000"+"0200"+"0100"+"IP raw socket!!".unpack("H*")[0]
+icmp[4,4] = checksum(icmp)				#set icmp checksum
+
+#build IP -> ipv4 and header size + TOS + TIPL + ID + flag and fragment offset + TTL + next proto(icmp)
+ip = ""
+ip += "45"+"00"+"0000"+"0000"+"0000"+"20"+"01"
+#+ checksum + sIP + tIP
+ip += "0000"+ sIp.split('.').map{|i| "%02x"%i.to_i}.join + tIp.split('.').map{|i| "%02x"%i.to_i}.join
+ip[4,4] = "%04x"%[icmp.length + ip.length]		#set total ip length
+ip[20, 4] = checksum(ip)				#set ip checksum
+
+pkt = [ip + icmp].pack("H*")
+puts "sending..."
+puts pkt.to_hexdump
+sock.send(pkt, 0, taddr)				#tell OS to send an use tMAC from this IP (will use ARP)
+sock.close
+
+#awesome source for Linux raw socket programing
+#Advanced TCP/IP - The TCP/IP Protocols & RAW Socket
+#http://www.tenouk.com/Module42a.html

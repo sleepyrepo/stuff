@@ -1,0 +1,44 @@
+#!/usr/bin/ruby
+require"socket"
+require"zhexdump"
+def checkSum(layer)
+short = ''
+sum = 0
+layer += "00" if layer % 4 != 0				#layer needs to be process in 2 bytes chunks
+        layer.each_byte do |e|
+                        short += "%c"%e
+                        if short.size == 4
+                                #puts"%s"%short
+                                sum += short.to_i(16)
+                                if sum.to_s(16).length > 4              #grab 16 overfloq bits
+                                                                        #and add them to sum
+                                        twoBytes = sum.to_s(16)[1..-1]
+                                        carry = sum.to_s(16)[0]
+                                        sum = twoBytes.to_i(16) + carry.to_i(16)
+                                end
+                                short = ''
+                        end
+        end
+        return "%04x"%[sum^0xffff]
+end
+
+sIP = "10.0.1.15"
+tIP = "10.0.1.9"
+#socket = ipv4, raw, next protocol in ip header = icmp
+sock = Socket.new( Socket::PF_INET, Socket::SOCK_RAW, Socket::IPPROTO_ICMP)
+#saddr = Socket.sockaddr_in(0,sIP)		#create local socket struct
+#p saddr.unpack('H*')[0]
+#sock.bind(saddr)				#bind to local socket/interface
+
+#icmp: type(1 byte) + code(1 byte) + checksum(2 byte) + data(what ever bytes)
+icmp = "%02x%02x%04x%s"%[8, 0, 0, "garbage!!!!!!".unpack('H*')[0]]
+icmp[4,4] = checkSum(icmp)
+
+taddr = Socket.pack_sockaddr_in(0,tIP)		#create remote socket
+while true
+	sock.send([icmp].pack('H*'), 0, taddr)	#send to target
+	puts"-"*100
+	puts sock.recv(1500).to_hexdump		#will return layer 3 and above icmp from all
+						#b/c its not binded to nay port
+	puts"+"*100
+end

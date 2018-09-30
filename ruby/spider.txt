@@ -1,0 +1,32 @@
+#!/usr/bin/ruby
+
+require"open-uri"
+require"nokogiri"
+
+#might need to install open_uri_redirections if get error `open_loop': redirection forbidden:
+#i.e. https -> http
+#https://github.com/kenpratt/wikipedia-client/issues/28
+
+ARGV.length < 1 && (puts"Usage #{$0} url_to_spider\nExample #{$0} http://scanme.nmap.org"; exit)
+								#check arguments, usage, and exit
+target = ARGV[0]						#grap url arg
+
+def spider(target)						#function to scrape href links
+  urls = []							#array top store href links
+  doc = Nokogiri::HTML(open(target, 
+			"User-Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X x.y; rv:10.0) Gecko/20100101 Firefox/10.0"))
+								#set open-url agent to MAC firefox, and create nokogiri 
+								#document object
+  doc.css("a").each do |a|					#use css method to ge array of <a> tag
+    href = a["href"].to_s					#grab href attribute on <a> tag and force to string 
+								#b/c may get "" = NilClass and no method error
+    urls << href if href[0,4] == "http" && href[/#{target}/]	#grab only absolute and related url 
+    urls << target + href.sub(/^\./,"") if href[0,4] != "http"	#grab relative url link i.e /relative/to_current_path
+  end								#and remove any . in th path
+  return urls							#return aray of href
+end
+
+result = spider(target)					
+result = result.uniq						#make array element unique
+result.each{|l| result += spider(l)}				#add more href to array
+puts result.uniq						#make it unique

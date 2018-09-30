@@ -1,0 +1,137 @@
+#!/usr/bin/ruby
+
+require"socket"
+#gem install zhexdump
+require"zhexdump"
+
+#method to create checksum
+def checkSum(layer)                                     #create checksum VERY IMPORTANT!!
+        short = ''                                      #break the section into 2 bytes chunks
+        sum = 0                                         #add them together
+	layer += "00" if layer.length % 4 != 0          #catch tcp frames with odd bytes
+						#mine is string representation of hex(easy on pack)
+        layer.each_byte do |e|                          #any 16 bit overflow from each addition must be 
+                short += "%c"%e                         #added back to the sum
+                if short.length == 4                    #if 2 byte size
+                        sum += short.to_i(16)           #sum it up
+                        if sum.to_s(16).length > 4                      #if sum > 16 bit
+                                twoBytes = sum.to_s(16)[1..-1]          #grab 4 least significant nibble
+                                carry = sum.to_s(16)[0]                 #grab 1 most significant nibble  
+                                sum = twoBytes.to_i(16) + carry.to_i(16)#add them together to maintain 
+                                                                        #16 bit
+                        end
+                        short = ''                                      #clear buffer and continue
+                end
+        end
+        return "%04x"%[sum^0xffff]                      #flip the bits with XOR 0xffff and return 2 bytes
+end
+
+#raw TCP socket, the IPPROTO_TCP tells OS to add 0x06 to its layer 4
+@sock = Socket.new(Socket::PF_INET, Socket::SOCK_RAW, Socket::IPPROTO_TCP)
+@tip = "10.0.0.2"
+@sip = "10.0.0.4"
+@tport = 80
+@sport = 0xf000
+@tsaddr = Socket.sockaddr_in(@tport, @tip)
+
+#method to craft TCP
+def tcp(seq, ack, flags, data)
+	tcp="%04x%04x%08x%08x%x%x%02x%04x%04x%04x%s"%[\
+	@sport,@tport,seq,ack,0,0,flags,0xf000,0,0,data.unpack('H*')[0]]
+							#tcp: sport + tport + #seq + #ack + 
+							#HL(/4) + reserve + flags + 
+							#winSize + checksum + urgent pointer
+							#flags: 00000000 -> 00UA PRSF
+	tcp[24] = "%x"%5				#set tcp header length usually 20 bytes
+	pseudo = @sip.split('.').map{|i| "%02x"%i}.join+@tip.split('.').map{|i| "%02x"%i}.join\
+	 + "0006" + "%04x"%[tcp.length / 2]
+	tcp[32, 4] = checkSum(pseudo + tcp)		#TCP checksum is done on pseudo header + tcp
+							#pseudo header: sip+tip+\x00+\x06+tcp length
+	return tcp
+end
+
+#method to send and display TCP data
+def sendTcp(sseq, sack, sflags, sdata='')	
+	pkt = [tcp(sseq, sack, sflags, sdata)].pack('H*')	#craft tcp
+	puts pkt.to_hexdump				#hexdump it out
+	sseq = pkt[4,4].unpack('H*')[0].to_i(16)	#grab source #seq
+	sack = pkt[8,4].unpack('H*')[0].to_i(16)	#grab source #ack
+	sflags = pkt[13].unpack('H*')[0].to_i(16)	#grab source flags
+	@sock.send(pkt,0,@tsaddr)			#send it
+	puts"--> flags: 0x%x seq: 0x%x ack: 0x%x data: 0x%x"%[sflags, sseq, sack, pkt.length - 20]	
+	puts"-"*100	
+	return sseq, sack, sflags, pkt.length - 20	#return #seq #ack flags and data lengh
+							#normal tcp header = 20
+end
+
+#method to get and display TCP data
+def recvTcp()
+	ret = @sock.recv(1500)				#grab packet from socket
+	tseq = ret[24,4].unpack('H*')[0].to_i(16)	#grap server #seq
+	tack = ret[28,4].unpack('H*')[0].to_i(16)	#grab server #ack
+	tflags = ret[33].unpack('H*')[0].to_i(16)	#grab server flags
+	dataLen = ret[40..-1].length			#calculate payload length
+							#(return packet has layer 3 and above)
+	puts ret[20..-1].to_hexdump			#do hexdump
+	puts"<-- flags: 0x%x seq: 0x%x ack: 0x%x data: 0x%x"%[tflags, tseq, tack, dataLen]
+	puts"-"*100	
+	return tseq, tack, tflags, dataLen		#return #seq #ack flags and data lengh
+end
+
+#method to initiate 3 way handshake
+def threeWay(sseq, sack)
+	#SYN -->
+	sseq, sack, sflags, sdata = sendTcp(sseq, sack, 0x02)
+
+	#STN/ACK <--
+	tseq, tack, tflags, tdata = recvTcp()		#server return packet with 
+							#ack = last SYN's #seq + 1
+	(puts"not a SYN/ACK after SYN!";exit) if tflags != 0x12	#check if its really SYN/ACK
+	(puts"tack out of sync!";exit) if tack != sseq + 1
+	
+	#ACK-->
+	sseq, sack, sflags, sdata = sendTcp(tack, tseq + 1, 0x10)	#send back ACK to complete 3 way
+								#with #ack = last SYN/ACK's #seq + 1
+	puts"\n" + "+"*40 + "3 Way done" + "+"*40 + "\n\n"
+	return sseq, sack, tseq, tack	#when done return both client/server's latest #seq and #ack
+end
+
+`iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP`	#block RST packets from OS to server	
+							#it doesnt know this socket is open
+							#so it send out RST
+sseq = 1#rand 0xffffffff				#initial source #seq
+sack = 0						#initial source #ack
+sseq, sack, tseq, tack = threeWay(sseq, sack)		#start  3way handshake
+
+sdata = "GET / HTTP/1.0\n\n\n\n"			#payload GET method
+
+sseq, sack, sflags, sdata = sendTcp(sseq, sack, 0x10, sdata)	#--> send ACK with data
+tseq, tack, tflags, tdata = recvTcp()				#<-- get return ACK 
+
+while true						#loop to get data and return ACK
+	tseq, tack, tflags, tdata = recvTcp()		#<--ACK with data
+		if (tflags & 0b00000001) == 1		#if flags has FIN(server initiated teardown)
+							#usually with FIN/PSH/ACK
+							#in this case ACK to FIN/PSH/ACK #ack must be 
+							#server last #seq + server payload + 1 increment
+							#(teardown)
+				sseq, sack, sflags, sdata = sendTcp(sseq, tseq + tdata + 1, 0x10)#-->ACK
+				sseq, sack, sflags, sdata = sendTcp(sseq, sack, 0x11)#-->FIN/ACK
+										#continue teardown
+				tseq, tack, tflags, tdata = recvTcp()		#<--ACK
+				puts"done, exit..."
+				break
+		end
+	sseq, sack, sflags, sdata = sendTcp(tack, tseq + tdata, 0x10)	#--> normal ACK after payload
+end
+`iptables -F`			#clear out iptable
+#summy of all this madness
+#start 3 way handshake
+#send GET request and get back ACK
+#loop
+	#server sends payload, and return ACK on all of them
+#end
+#server last payload packet has FIN/PSH/ACK
+#respond with ACK (#ack has server last $seq + last payload length + 1) for teardown
+#send back a FIN/ACK to contiue teardown
+#server sends last ACK, done!

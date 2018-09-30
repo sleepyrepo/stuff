@@ -1,0 +1,38 @@
+#!/usr/bin/ruby
+
+#aptitude install libssl-dev
+#gem install openssl
+require"openssl"
+
+#wpa-Induction password "Induction" and SSID "Coherer"
+essid = "Coherer"
+pass = "Induction"
+aNonce = ["3e8e967dacd960324cac5b6aa721235bf57b949771c867989f49d04ed47c6933"].pack("H*")
+sNonce = ["cdf405ceb9d889ef3dec42609828fae546b7add7baecbb1a394eac5214b1d386"].pack("H*")
+
+bssid = ["000c4182b255"].pack("H*")
+client = ["000d9382363a"].pack("H*")
+pke = "Pairwise key expansion"
+#b = pke + "\x00" + mac1 + mac2 + nonce1 + nonce		****mac1 has to be less than < mac2 and nonce1 has to be less than nonce2
+b = pke + "\x00" + [bssid,client].min + [bssid,client].max + [aNonce,sNonce].min + [aNonce,sNonce].max
+#data = eapol 2nd handshake 802.11 data - MIC
+data = ["0203007502010a00100000000000000000cdf405ceb9d889ef3dec42609828fae546b7add7baecbb1a394eac5214b1d386000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001630140100000fac020100000fac040100000fac020000"].pack("H*")
+
+#PMK = PBKDF2(HMAC−SHA1, PSK, SSID, 4096, 256)
+#key = OpenSSL::PKCS5.pbkdf2_hmac_sha1(pass, salt, iter, key_len) 
+pmk = OpenSSL::PKCS5.pbkdf2_hmac_sha1(pass, essid, 4096, 32)		#aka PSK (WPA key)correct
+
+ptk = OpenSSL::HMAC.digest("SHA1", pmk, b + 0.chr)[0,16]	#only need first 16 bytes of ptk to calculate mic
+
+#OpenSSL::HMAC.digest(digest, key, data) → aString
+#mic = OpenSSL::HMAC.digest("MD5", ptk, data)[0,16]		#WPA1 hmac(MD5) -> mic ** probably wrong here b/c WPA1 is a quick fiX to WEP
+mic = OpenSSL::HMAC.digest("SHA1", ptk, data)[0,16]		#WPA2 hmac(SHA1) -> mic
+
+puts "pmk:\t\t" + pmk.unpack("H*")[0], "\n"
+puts "ptk:\t\t" + ptk[0,16].unpack("H*")[0], "\n"
+puts "mic:\t\t" + mic.unpack("H*")[0]			#if hmac of (data - mic) with ptk[0,16] = mic then pass is correct
+puts "expected mic:\ta462a7029ad5ba30b6af0df391988e45"
+
+#good help
+#https://stackoverflow.com/questions/12018920/wpa-handshake-with-python-hashing-difficulties
+#https://stackoverflow.com/questions/15133797/creating-wpa-message-integrity-code-mic-with-python

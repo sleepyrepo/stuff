@@ -1,0 +1,51 @@
+#!/usr/local/bin/ruby
+						
+require'openssl'
+
+'''
+puts OpenSSL::Cipher.ciphers					#show all available cypher
+puts"*"*50
+#DES64 ECB key from the 2  7 byte string from 14 byte string
+#LM hash
+pass = "pass"
+pass.upcase!							#change to upcase
+p pass
+
+if pass.length < 14						#id password < 14 bytes, paddd them with null
+	pass = pass + "\0" * (14 - pass.length)
+end
+
+p "password padded to full 14 bytes: " + pass.unpack("H*")[0]
+
+top = pass[0,7]							#split the password into 2, 7 byte strips
+bottom = pass[7,7]
+p "first 7 bytes: " + top.unpack("H*")[0]
+p "last 7 bytes: " + bottom.unpack("H*")[0]
+
+cipher = OpenSSL::Cipher.new("des")				#choose des ecb 64
+cipher.encrypt							#set encrypt mode
+cipher.key = top + "\0"						#padd the 7 byte to 8 byte = 64 bit key
+
+winString = "KGS!@#$%"						#window string used to generate the LM hash
+p "top lm hash: " + cipher.update(winString).unpack("H*")[0]
+
+cipher.key = bottom + "\0"
+p "bottom lm hash: " + cipher.update(winString).unpack("H*")[0]
+#0000000000000000 = des AA-D3-B4-35-B5-14-04-EE
+
+puts"*"*50
+'''
+if ARGV.length < 1
+	puts"Usage: %s password"%[__FILE__]
+	exit
+end
+
+#NTLM hash	
+						#change string into 16 bit unicode little indian
+pass = ARGV[0].encode("utf-16le")				#encode unicode 16 little indian
+#p "unicode 16 little indian: " + pass.unpack("H*")[0]
+
+md4 = OpenSSL::Digest::MD4.new					#The create md4 hash
+
+#p "NTLM Hash: " + md4.digest(pass).unpack("H*")[0]
+puts md4.digest(pass).unpack("H*")[0]
