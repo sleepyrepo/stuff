@@ -3,11 +3,9 @@
 require"openssl"
 pass = "pass12345678"
 
-lmStr = 'KGS!@#$%'
-#puts lmStr
+LMSTR = "KGS!@#$%"                              #lm string to enctypt with DES
 
 #LM
-LM_MAGIC = "KGS!@\#$%"                          #lm string to enctypt with DES
 padded = pass.ljust(14, "\x00")                 #padd password with NULL to 14 bytes
 passArr = padded.upcase.scan(/......./)         #split into array of 7 char string
 
@@ -21,13 +19,12 @@ lm = keys.map do |k|
   des = OpenSSL::Cipher.new("DES")              #instance DEX cipher
   des.key = k                                   #set key
   des.encrypt                                   #set encrypt mode
-  des.update(LM_MAGIC).unpack("H*")             #encrypt the lm string
+  des.update(LMSTR).unpack("H*")                #encrypt the lm string
 end
 
 #NTLM
 md4 = OpenSSL::Digest.new("MD4")                #straight farward
-u = pass.bytes.pack("v*")                       #md4 of a unic  
-ode little endian password string
+u = pass.bytes.pack("v*")                       #md4 of a unicode little endian password string
 ntlm = md4.digest(u).unpack("H*")[0]
 
 p [lm.join.upcase, ntlm.upcase]
