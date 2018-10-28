@@ -2,15 +2,18 @@
 
 require"openssl"
 pass = "pass12345678"
+#pass = "a"*30
+pass = pass[0,14]                               #password max len at 14 bytes
 
 LMSTR = "KGS!@#$%"                              #lm string to enctypt with DES
 
 #LM
 padded = pass.ljust(14, "\x00")                 #padd password with NULL to 14 bytes
+p padded
 passArr = padded.upcase.scan(/......./)         #split into array of 7 char string
 
 keys = passArr.map do |k|                       #gen keys from each string by appending a "0" to each 7 bits chunk
-  bits = k.unpack("B*")[0].scan(/......./)      #grab each 7 bits                 
+  bits = k.unpack("B*")[0].scan(/......./)      #grab each 7 bits
   ext = bits.map{ |e| e + "0" }.join            #append a 0 to the end of it
   [ext].pack("B*")                              #pack it back
 end
