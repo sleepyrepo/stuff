@@ -1,7 +1,7 @@
 ;include these function into .asm source with the header below
 ;%include "myIncludeFunc.asm"
 
-prints:				;printf(char* str)
+prints:				;prints(char* str)
   push ebp
   mov ebp, esp
     mov edi, [ebp + 8]    	;get string address
