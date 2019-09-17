@@ -70,14 +70,14 @@ strlen:				;strlen(char* str)
   ret
 
 
-atoi:				;atoi(char* str)
+atoi:                           ;atoi(char* str)
   push ebp
   mov ebp, esp
   mov ecx, [ebp+8]
   push ecx
   call strlen                   ;get strlen
   mov ecx, eax                  ;use strlen as index
-  mov esi, str                  ;str pointer
+  pop esi                       ;get str pointer
   xor edi, edi                  ;sum holder
   mov ebx, 10
   .traverse:               ;outer loop traverse each base 10 index
@@ -85,12 +85,10 @@ atoi:				;atoi(char* str)
     push ecx                    ;save outer loop ecx
     dec ecx                     ;dec ecx for inner loop
     .make_exponential:     ;build base 10 multiplier 10^3, 10^2, 10^1, etc
-      cmp ecx, 0
-      je .done         ;break if idx = 0 else loop
+      test ecx, ecx
+      jz .done         ;break if idx = 0 else loop
       mul ebx
-      dec ecx
-      cmp ecx, 0
-      jne .make_exponential
+      loop .make_exponential    ;loop dec first then compare with 0
       .done:
     push eax                  ;save base 10 multiplier
     movzx edx, byte [esi]     ;get char
@@ -101,9 +99,7 @@ atoi:				;atoi(char* str)
     mul ecx
     add edi, eax              ;increase sum
     pop ecx                   ;get outer loop ecx
-    dec ecx
-    cmp ecx, 0
-    jne .traverse
+    loop .traverse
   mov eax, edi                  ;return str in int
   leave
   ret
