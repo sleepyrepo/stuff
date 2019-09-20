@@ -103,3 +103,43 @@ atoi:                           ;atoi(char* str)
   mov eax, edi                  ;return str in int
   leave
   ret
+
+sortStr:                        ;sort(char* str)
+  push ebp
+  mov ebp, esp
+  .getStrLen:
+    mov esi, [ebp+8]      ;str start address
+    mov edi, esi       ;copy to edi to find end of str
+    .findNull:           ;locate null by inc str address
+      cmp byte [edi], 0x00
+      je .done
+      inc edi           ;inc str sddress till find null
+      jne .findNull
+      .done:
+    sub edi, esi          ;cal diff b/w start and end address(strlen)
+  mov ecx, s                    ;str[i]
+  add ecx, edi                  ;str[strlen], get end of str addr
+  mov esi, s                    ;str[i]
+  .outer:                       ;for(int i = 0;i < strlenl;i++)
+    lea edi, [esi+1]            ;str[i + 1]
+    .inner:                     ;for(int j = i + 1;j < strlenl;j++)
+      cmp edi, ecx              ;break if str[j] >= end str
+      jae .bye
+      .comp:
+        mov al, [esi]           ;if(str[i] >= str[j]) skip shuffle
+        cmp al, [edi]
+        jbe .noShuffle
+      .shuffle:                 ;swap str[j] <--> str[i]
+        mov bl, [edi]
+        mov [edi], al
+        mov [esi], bl
+      .noShuffle:
+      inc edi                   ;j++
+      cmp edi, ecx              ;j < strlen
+      jb .inner
+    .bye:
+    inc esi                     ;i++
+    cmp esi, ecx                ;i  < strlen
+    jb .outer
+  leave
+  ret
