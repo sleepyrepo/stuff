@@ -124,3 +124,37 @@ sortStr:                        ;sort(char* str)
     ._outer:
   leave
   ret
+
+
+unique:				;unique(char* str)
+  push ebp
+  mov ebp, esp
+  mov esi, [ebp+8]		;char* str
+  .outer:
+    cmp byte [esi], 0x00	;break if *str == \0
+    je ._outer
+    mov ecx, 1			;int i = 1
+    .inner:
+      cmp byte [esi+ecx], 0x00	;break if str[i] == \0
+      je ._inner
+      movzx eax, byte [esi+ecx]
+      cmp byte [esi], al		;if *str == *(str+1) shuffle
+      jne .noShuffle
+      .shuffle:			;shuffle str[i+1] <-- str[i+1+1]
+        cmp byte [esi+ecx], 0x00
+        je ._shuffle
+        movzx eax, byte [esi+ecx+1]
+        mov byte [esi+ecx], al
+        inc ecx
+        jmp .shuffle
+        ._shuffle:
+        dec esi			;str--, recheck the new swap value
+      .noShuffle:
+      inc ecx			;i++
+      jmp .inner
+      ._inner:
+    inc esi			;str++
+    jmp .outer
+    ._outer:
+  leave
+  ret
