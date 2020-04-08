@@ -11,6 +11,7 @@ my $site = "https://www.google.com";
 my $ua = LWP::UserAgent->new();
 #$ua->cookie_jar({});                                           #enable cookie, so no manual cookie get/set
                                                                 #enable cookie {} is shorthand to create templlary cookie memory
+#$ua->cookie_jar->as_string;                                    #view cookie after get request
 #$ua->agent($ieAgent);                                          #set user agent if needed
 #$ua->ssl_opts( SSL_verify_mode => 0, verify_hostname => 0,);   #disable verify SSL and hostname
 #$ua->proxy(["http", "https"], "http://127.0.0.1:8080");        #set proxy for http/s to burp
