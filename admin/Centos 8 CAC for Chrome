@@ -1,0 +1,43 @@
+
+Some info
+CAC Linux support
+https://militarycac.com/linux.htm
+
+Import DOD CA cert to Chrome 
+Download certs from here as normal user, unzip then import with Chrome
+https://public.cyber.mil/pki-pke/end-users/getting-started/linux-firefox/
+
+settings -> search ssl
+or
+setting
+  privacy and security
+  more
+  manage certifications
+
+***click Authorities TAB to import host cert
+Choose DoD_PKE_CA_chain.pem, and enable trust for web id/email
+
+
+after import DoD_PKE_CA_chain.pem, org-U.S. Government folder should appear with
+DOD EMAIL CA-41
+DoD Root CA 3
+
+And nsips should have no error loading
+
+
+CAC with chrome on Centos8
+https://github.com/OpenSC/OpenSC/wiki/Quick-Start-with-OpenSC
+opensc use pcsc interface, so it will install opensc-lite
+
+Setup opensc to enable CAC
+yum install opensc -y
+Will install opensc and dependents pcsc-lite, pcsc-lite-ccid, pcsc-lite-libs     
+
+systemctl enable pcscd.service --now
+
+Troubleshoot with
+opensc-tool
+  -l -> list reader
+  -r -> use reader number
+    -n -> reader name
+
