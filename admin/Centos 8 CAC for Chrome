@@ -41,3 +41,11 @@ opensc-tool
   -r -> use reader number
     -n -> reader name
 
+setup VMWARE
+install required pkg
+yum update -y (update kernel - needed for kernel-headers/devel and other stuff)
+yum groupinstall "Development tools" -y (latest kernel-headers/devel, gcc and friends)
+yum install elfutils-libelf-devel -y (fix VMMON VMNET load error)
+download vmware linux bundle(script), then run it
+i.e. bash VMware-Workstation-Full-15.5.6-16341506.x86_64.bundle
+start vmware workstation
