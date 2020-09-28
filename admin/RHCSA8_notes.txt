@@ -1,0 +1,1572 @@
+
+history -c -> clear history cache
+history -w -> write cache to ~/.bash_history
+history -> show previous cmd with numbers
+!cmd_number -> execute previous cmd number
+
+ctrl-a -> go to start of cmdline
+ctrl-d -> back delete cmdline (exit shell if nothing else to delete)
+ctrl-u -> delete whole line
+ctrl-r -> search patter in history
+  **type patterns then ctrl-r to cycle through match
+
+#flush last 3 cmd to file, clear mem, reload history from file(last 3 cmds)
+fc -nl -3 > .bash_history; history -c; history -r; history
+
+login shell: first shell to open after user login
+sub shell: sub shell to login shell
+
+all user login/sub shell startup script
+/etc/profile
+/etc/bashrc
+
+specific user login/sub shell startup script
+~/.bash_profile
+~/.bashrc
+
+vim
+i -> insert at cursor
+a -> insert after the cursor
+o -> insert below
+yy -> copy line
+dd -> delete line
+p  -> paste
+v -> copy highlight
+ -d -> cut
+ -y -> copy
+G -> go to bottom of file
+gg -> to gegin of file
+v -> get to visual mode
+ctrl-v -> visual mode block (can delete a whole column/selection)
+
+:/search_str
+ -n -> next match
+ -N previous
+
+**works only in vi/m
+:set ic -> set case insensitive for search
+O
+add \c at end of string i.e. :/search_str\c
+
+:set all -> to list all set options/settings
+
+:%s/str/newstr/g -> global sub
+:line_number -> go to line_number
+**no"__options__" -> turn on/off
+
+:help cmd_subject -> to get help
+-------------------------------------
+man (mandb***** to update /var/cache/man/index.db. usually done by /etc/cron.daily/man-db.cron)
+Examples or "See Also" sections at eat end of page
+use /examples or "G" to jump there
+
+a topic in man can spand multiple sections (category) i.e. printf can be shell cmd(1), libc(3), etc
+man 1 printf -> show me printf in cmd man page
+man 3 printf -> show me printf in libc man page
+
+dont know which man?
+man -k keyword or apropos will return match in any man summary page i.e. man -k lvm 
+(database must be built first with sudo mandb)
+apropo -> returns man page name, section number, and description
+important sections are usually 1(cmds), 5(file format), 8(sys admin cmd)
+
+***might need yum search when man -k or appropo not found what we need
+
+example
+man -k print
+apropos print | grep 1
+man 1 printf
+
+"See Also" section sometimes point to info page i.e. man ls -> info '(coreutils) ls invocation'
+this is info system help page(nor available to all)
+book suggested use 
+pinfo coreutils 'ls invocation'
+which is really pinfo
+-> Basics:
+-> Coreutils:
+-> ls invocation
+
+reference documents(anything install will have doc here)
+firefox /usr/share/doc/ -> for quick/painless navigation
+
+pinfo
+arrow up/down navigate, enter when reach links
+u -> return to parent node
+/search_str
+
+-------------------------------------
+mount
+best to have some dir on specific device for security/management
+/boot -> essential boot info(kernel can not boot with /)
+/var -> can excessive grow/shrink
+/home -> increase security i.e. noexec/nodev
+/usr -> contain program/lib/OS files, normal user dont need write access
+
+
+mount -> read from /proc/mount
+findmnt -> like mount but in tree structure(better)
+
+(disk free) df -Th -> show mounted device file system/free space human readable
+-filesystem -> mount name
+type -> file system type
+mount on -> where on /
+
+-------------------------------------
+
+wildcards
+* -> anynumber of char -> ls /*
+? -> any char -> ls /t?p, ***in regex ? == 0 or 1 char, but bash == any char***
+[] -> char in [..] -> ls /t[ampz]p
+{} -> expansion -> mkdir dir{1..3} or dir{1,2,3}  -> create dir1 - dir3 *****NO space b/w , , in {}
+ls -ld /etc/cron.{hourly,monthly}
+
+mkdir /home/$USER/bla
+ls -lrt -> long list, reverse, order by recent modify date
+ls -d /* -> show only dirs not content
+
+copy everythin keep all permission/property (archieve)
+cp -a /dir/. . -> copy everything including perm/hidden files in /dir/ to current dir
+cp -r /dir/. . -> same affect as above except reserve permission (need recursion b/c . means dir??)
+
+
+ln file hard_link
+hardlinks = filename link to inode
+-must be on same device
+-not in dir
+-file is gone when last link is removed
+-must be owner of file
+
+ln -s file symlink
+symlink = filename link to filename
+-can be in diff device
+-yes on dir
+-file gone when original file is removed
+-no need to be owner
+
+
+tar( no compression)
+tar -[cxtr]vf file.tar file
+-c -> create
+-x -> extract
+-t -> list
+-r -> add new file to archieve
+-f -> file archieve to use/create
+-p -> preserve file attributes(default for root***)
+-C -> output dir
+tar -xvf file.tar -C /dir/
+
+star -> tar with non defsult file attt like ACL (new version of tar supports this)
+
+compression gzip/bzip2
+tar cvf desktop.tar Desktop
+gzip desktop.tar -> get desktop.tar.gz
+tar xvf Desktop.tar.gz -> will decompress and untar automatically
+tar czvf desktop.tar Desktop -> will create gzip file
+-j for bzip2
+
+-------------------------------------
+text processing
+
+AWK
+print column 1,2,3,4 with : filed dilimiter(default space)
+awk -F: '{printf"%-20s%s\t%s\t%s\n", $1,$2,$3,$4}' /etc/passwd
+
+SORT
+awk -F: '{printf"%-20s%s\t%s\t%s\n", $1,$2,$3,$4}' /etc/passwd | sort -n -r -k3
+-n sort numeric(default byte order(first))
+-r reverse
+-k -> field number (use blank as default field separator)
+
+CUT
+print column 1,2,3,4 with : filed dilimiter
+cut -d: -f1,2,3,4 /etc/passwd
+-d -> use : as filed delimiter
+-f show filed numbers
+
+SORT
+cut -d: -f1,2,3,4 /etc/passwd | sort -n -r -t: -k3
+-t -> use : delimiter
+
+
+head/tail (default 10 lines)
+ps -elf | head -4 -> return first 4 lines
+ps -elf | tail -4 -> return last 4 lines
+
+WC -> defaulkt output
+#line #word #byte
+
+SED
+sed "2 s|bin|BIN|g" /etc/passwd
+-replace all bin with BIN on line number 2
+
+sed "2d" /etc/passwd -> delete line 2
+sed -n "2p" /etc/passwd -> print line 2
+  -n -> subpress output(default print pattern and replaced pattern, without it will se dup line 2)
+  2p -> print 2nd line
+
+sed "s|:|\t|g" /etc/passwd
+-i -> to edit text file in place
+***reading text files, less is way better using vi /search n/N
+
+
+redirection (****order is importanrt)
+> file 2>&1 -> redir stdout to file, then redir stderr to stdout destination
+!= 
+2>&1 > file -> redir stderr to stdout destination, then redir stdout to file
+***onlystdout is redir to file***
+
+-------------------------------------
+SSH
+
+ssh-keygen -> gen key pair
+ssh-copy-id -i .ssh/id_rsa.pub student@10.0.0.20 -> copy id_rsa.pub over to .ssh/authorized_keys
+ssh -i .ssh/id_rsa student@10.0.0.20 -> key login
+
+sshd_config defaults (root login permit)
+# The strategy used for options in the default sshd_config shipped with
+# OpenSSH is to specify options with their default value where
+# possible, but leave them commented.  Uncommented options override the
+# default value.
+
+/etc/ssh/ssh_host* -> pub keys give to client to enc connection(these pub keys gets add to .ssh/known_hosts)
+
+use ssh -Y to run gui app (client needs xserver running, server allow display screen to client)
+scp/sftp/rsync
+
+rsync: sync files between computer (just copy the difference)
+**target needs to install rsync
+rsync root@10.0.0.20:/etc /tmp/
+-r -> recursive, not copy symlink
+-a -> archieve, copy everything include attributes
+
+-------------------------------------
+console vs terminal
+
+GUI desktop (can have multiple terminal in gui)
+ console == GUI
+ terminal == shell
+text mode desktop (only one terminal at a time)
+ console == terminal == shell
+
+linux comes with 6 virtual terminal to swap from
+text mode desktop: /dev/tty1-6
+GUI dsktop: /dev/tty1-3(GUI), /dev/tty4-6 (text mode desktop)
+  
+login to text mode console f4-6
+login to tty4 -> ctrl+alt+f4 (on imac ctrl+slt+fn+f4)
+w -> show who is loged into which tty (tty2 and tty4 should be open)
+
+back to GDM ctrl+alt+f1 (GUI login again)
+back to gui console ctrl+alt+f2***
+ctrl+alt+f3???
+
+for text mode desktop: use ctrl+alt+f1-6 to switch between the 6 pseudo terminal device
+w -> to check which tty are open
+
+
+each new terminal opened in GUI Desktop are in /dev/pts/ (used to be pty)
+tty -> show which tty ot pts the terminal is using
+
+reboot/poweroff/halt (ask systemd)
+tudent@localhost ~]$ ls -l /usr/sbin/reboot 
+lrwxrwxrwx. 1 root root 16 Nov  8 18:14 /usr/sbin/reboot -> ../bin/systemctl
+[student@localhost ~]$ ls -l /usr/sbin/halt 
+lrwxrwxrwx. 1 root root 16 Nov  8 18:14 /usr/sbin/halt -> ../bin/systemctl
+[student@localhost ~]$ ls -l /usr/sbin/poweroff 
+lrwxrwxrwx. 1 root root 16 Nov  8 18:14 /usr/sbin/poweroff -> ../bin/systemctl
+
+force reset, BAD IDEA
+echo b > /proc/sysrq-trigger
+
+/etc/issue -> banner login message
+/etc/motd ->  login message
+
+
+-------------------------------------
+user mgt
+
+su -> switch user without execute startup scripts/env, default to root
+su - -> switch user and execute startup scripts/env, default to root
+
+sudo -> allow member of wheel to run root cmd
+usermod -aG wheel LOGIN
+**logout, and log back in to update
+/etc/sudoer file syntax
+user from_host=(as_user:as_group) cmds
+-> user can execute cmds as_user or as_group from_host
+
+lisa    ALL=(ALL,!root) /bin/passwd
+-> let lisa run passwd as ALL user except root (sudo -u bob passwd)
+
+user management
+useradd -m -u 1201 -G sales,ops linda
+-m -> create home dir
+-u -> use this uid
+-G -> add secondary group
+-g -> add primary group
+-s -> shell
+
+default useradd config
+/etc/login.defs
+/etc/default/useradd 
+
+passwd/chage(password property)
+passwd -n 30 -x 90 -w 3 $USER
+ -set password life between 30-90 days, and warn in 3 days
+
+chage -> similar to passwd.  just use usermod or passwd
+  -l -> good flag to list passwd proper ty
+
+chage -l $USER -> list password property
+
+add default home/dir for all user
+mkdir /etc/skel/Bla
+add default editor for all user
+add export EDITOR=/usr/bin/vim -> /etc/skel/.bashrc
+
+groupadd/mod to work with group
+-use can only be added to group with useradd/mod
+
+groupmems: check group membership
+sudo groupmems -g wheel -l
+
+userdel -r -> delete user and home
+
+file ownership
+***access process***
+1) check [u]ser file/acl, stop if match
+2) check [g]roup file/acl permisson, stop if match
+3) check [o]ther permission
+
+find file owned by $USER that anyone can read, show in long list
+find . -user $USER -type f -perm -004 -exec ls -l {} \;
+**-exec needs to end cmd with \;
+
+-uid -> uid
+-user -> username
+-group
+-perm mode -> -4000 /4000 = same(file that has these bits set)
+-perm -contain_this_mode
+-type [f,d,...etc]
+-exec -> exec cmd on file(anything folloe -exc is considered cmd and argument till reach \;.  {} is each file)
+
+change owner.group
+chown user:group ./file
+chown user.group ./file
+chown :group ./file
+chown .group ./file
+chgrp group ./file
+
+newgrp -> set effective primary group(so file is created with permission to group)
+
+-------------------------------------
+file permissions
+
+dir permission
+r -> list files i ndir
+w -> create/del files
+x -> cd into dir
+
+chmod 755 ./file -> owner(RWX) group(RX) other(RX) -- absolute mode use numbers
+chmod u=rwx,g=rx,o=rx ./file -> same as above -- relative mode use u/g/o
+chmod g+w,o+w ./file -> add W to group and other
+chmod -x ./file -> no one have E on file
+chmod -R o+X -> X == change on dir and some files(if file u/g has x)
+
+SUID/SGID/sticky bit
+SUID(4755) -rws-r-x-r-x -> file gets execute as owner
+SGID(2755) drwx-r-s-r-x -> chmod g+s ./dir, inheritance group owner of dir/sub
+ -files: files created in dir will get group owner same as the dir
+ -dir: dir created in here will get SGID group owner same as the dir
+sticky(1755) drwx-r-x-r-t -> ***only FILE owner, or DIR owner can delete file -> chmod +t ./file***
+
+***same with U/G
+t = sticky , o has x
+T = sticky, o has no x
+
+acl
+-pros: multiple user/group permission, inheritance via default ACL
+-cons: file and backup util may not support
+
+backup/restore ACL: getfacl -R /directory > file.acls. To restore setfacl --restore=file.acl.
+drwxr-xr-x+ additional + at end of file long list if ACL exist
+
+ls -ld Desktop
+drwxr-xr-x. 2 student student 6 Apr 23 12:47 Desktop
+getfacl Desktop
+# file: Desktop
+# owner: student
+# group: student
+user::rwx
+group::r-x
+other::r-x
+
+setfacl -m g:sales:rx Desktop
+ls -ld Desktop
+drwxr-xr-x+ 2 student student 6 Apr 23 12:47 Desktop
+getfacl Desktop
+# file: Desktop
+# owner: student
+# group: student
+user::rwx
+group::r-x
+group:sales:r-x
+mask::r-x
+other::r-x
+
+setfacl -m u:linda:rwx Desktop -> give linda RWX on folder
+
+inherit via defaukt acl
+setfacl -m d:g:sales:rx Desktop -> all files created in dir now will give sales R/X by default
+setfacl -m d:o::- Desktop -> block others to get permission on new file create
+
+setfacl -flag default:u/g/o:name:r/w/x 
+-m -> modify
+-x -> remove
+-b -> remove all
+-k -> remove default
+
+***
+"This is important to know. If you want to use ACLs to configure access for multiple users or groups to the same directory, you HAVE TO SET ACLs twice. First, use setfacl -R -m to modify the ACLs for current files. Then, use setfacl -m d: to take care of all new items that will be created also."
+
+make folder and new sub file/dir readable by secondaty group
+mkdir -p /data/sales
+chown :sales /data/sales -> set owner to sales
+chmod g+sw,o=t /data/*	-> set W/SGUID so /data/sales, and sticky bit 
+setfacl -R -m g:account:rX /data/sales -> give account R/X ON /data/sales and anything in it EXCEPT files*****
+setfacl -m d:g:account:rx /data/sales -> give account R/X on new new dir and R on new files in /data/sales
+
+****
+when applying acl, file permission gets port to ACL if not explicitly specify
+so the sale group in above comamnd will get ACL of g=RWX  b/c file permision ariginally had g=WRX
+same with default acl
+***
+
+acl mask
+  maximun permission any user/group can have(except owner)
+  gets update on chmod/setfacl
+
+setfacl -m m::r-- /file -> limit all users to just R(except owner)
+
+setfacl -m u::rwx,g::rwx,o::-- /sth -> same as chmod 770 /sth
+setfacl -m g:wheel:rwx /sth -> noew roup root and wheel has rwx
+and
+ls -ld /sth -> drwxrwx---+ 2 root root 6 Jul 13 14:17 /sth
+
+umask(default mask, user:0002, root:0022)
+-max perm for file(666) and dir(777)
+-so, with umask 022
+  file: 666 - 022 = 644
+  dir: 777 - 022 = 755
+best to set default umask for all users in /etc/profile.d/umask.sh, or indovidual user ~/.profile
+
+extended attribute (/etc/fstab needs mount with user_xattr or will get "operation not supported")
+chattr +i Desktop
+lsattr Desktop
+-i -> imutable
+
+pay attention on how to use SGID/ACL/umask
+
+*****
+dir level perm
+R -> list files
+W -> add/del files(perm on file does not matter)
+X -> cd
+
+file level perm
+R -> read file
+W -> edit file
+X -> execute file
+*****
+
+lab 7.1
+rm -rf /data
+remove everything in dir(including .hidden)
+rm -rf * .*
+
+mkdir -p /data/{account,sales}
+chown :sales /data/sales
+chown :account /data/account
+chmod g+s,o+t /data/* -> s/guid/sticky bit must be done with chmod
+setfacl -Rm u::rwx,g::rwx,o::--- /data/* -> CAN NOT do s/guid
+setfacl -m d:u::rwx,d:g::rwx,d:o::--- /data/* -> cleaner than chmod 3770 /data/*
+
+-------------------------------------
+Network
+
+network name: int type + type + index id
+ens33 -> ethernet hot plug index 33
+
+ip: validate network config** not for RHCSA
+ip addr -> network addr
+ip route -> route info
+ip link -> state
+ip neigh -> arp
+
+**makesure gateway is on same lan as interface UP, check
+ip route
+ip a
+
+check ports/service
+ss -> similar to netstat i.e. ss -antp return similr to netstat
+netstat -antp
+
+ip cmd (all non persistance)
+ip link set ens33 down
+ip link set ens33 up
+ip address add 10.0.0.100/24 dev ens33
+ip address del 10.0.0.100/32 dev ens33
+
+Networkmaanager read /etc/sysconfig/network-scripts/ifcg-device_name on start
+**dev -> network device
+**connection -> config used on dev
+ -so a device cna have multiple config i.e. home/office static/dhcp setup
+
+sample getting help with ip/nmclii
+-nmcli connection add help
+-ip address add help
+
+nmcli general permissions -> check permission ofr current user
+nmcli -> show brief of everything
+nmcli device -> show all device status/connections
+nmcli device show ens33 -> show specific device details********
+nmcli connection -> show connections(non active have -- device, active have device and GREEN)
+nmcli connection show -> show connection setting
+
+add dynamic ip connection
+nmcli connection add type ethernet ifname ens33 con-name dhcp ipv4.method auto
+type -> medium type
+ifname -> interface name
+[con-name] -> connection name
+ipv4.method -> auto(dhcp),manual(staic)
+connection.autoconnect = yes(default, use this connection on startup)
+***if more than connection.autoconnect = yes, the last profile will be use
+
+add static ip connection
+nmcli connection add type ethernet ifname ens33 con-name static ipv4.addresses 10.0.0.100/24 ipv4.gateway 10.0.0.1 ipv4.dns 8.8.8.8 ipv4.method manual
+
+add another ip(modify)
+nmcli connection modify static +ipv4.addresses 10.0.0.200/24
+
+load/reload the config
+nmcli connection up static
+
+interactive edit(with describe)
+nmcli connection edit dhcp 
+nmcli> print -> show current settings
+nmcli> describe connection.autoconnect -> explain what this is!!
+nmcli> set connection.autoconnect no -> change it
+nmcli> save -> save change
+
+nmcli connection modify dhcp connection.autoconnect yes
+
+**************
+*****************nmtui is way easier and quick***
+nm-connection-editor -> gui limited
+********
+/etc/hosts ->local dns resolve
+/etc/hostname -> localhost name -> use hostnamectl to trigger the reload
+do not edit /etc/resolv.conf b/c Networkmanager will overwrite it
+
+-------------------------------------
+yum == dnf
+**think dnf is better with more auto complete, but backward compatibility issue
+
+
+repo file in /etc/yum.repo.d/*.d
+[label/repoID] -> start of repo(oen file can have multiple repo)
+name= -> repo name
+mirrorlist= -> url with list of baseurl (optional) if use this, no need baseurl
+baseurl= -> url(http://,ftp://,file://)
+gpgcheck= -> 1|0 package integrity check (optional)
+gpgkey= -> /etc/pki/rpm-gpg/* (optional), download automatically when contatc repo
+
+yum-config-manager -> need yum install yum-utils -y
+  --add-repo="repo_url" -> create/enable new repo file
+  --import "repo_url" -> some repo use rpm package to setup repo for later install
+    yum install repo_url.rpm 
+or
+
+dnf/yum config-manager -> same as yum-config-manager which needs yum-utils
+  --enable repoid
+  --enable repoid
+
+
+dnf
+  repolist (all) -> enabled repo(disables) 
+  install rpm -> install pkg and repo
+  search -> look in package name and summary (download repo metadata then searach)
+    all -> include look in description
+  provides */file_name -> look for specific file path in package i.e. yum provides */nmcli
+  remove -> remove package and anything that DEPENDS ON IT
+  list -> show both installed/available and which repo(@anaconda if installed)
+    installed -> show only installed package
+  group -> manage specific functions instead of just a package i.e. "Virtualization Host"
+    list hidden -> show all package (including hidden)
+    install
+    info -> show rpm files in group(+ pkg will be installed, -pkg will not be installed, " " laredy installed, so nothing)
+  update -> package is replaces (except kernel will get boot option)
+  clean all -> clear metadeta (if yum repolist has ! infront of repo, its out of sync. so yum clear all, then repolist to update db)
+  history -> show what was ran
+    info ID -> show who/and what installed
+    undo ID -> undo yum action
+  module -> set of packages belong to an application with multiple version(stream) and install type(profile)
+    list -> show all available module with coresponding version(stream) and install type(profile)
+    list php -> list all available php module
+    info php:7.3 -> view php module version(stream) 7.3 info
+      --profile -> show what gets install on each profile
+    install php:7.3/common -> install/enable php 7.3 common
+    **list php -> should now show php 7.3 as enabled/installed
+    **to switch to php 7.2
+    remove php:7.3	-> uninstall
+    reset php	-> remove enabled module
+    install php -> without stream/profile, yum. will install default(php:7.2/common)
+    distro-sync php -> update dependent package
+
+modules
+AppStream: userspace packages (can have many app version to manage i.e. php 7.2/3)
+BaseOS: core system repo
+
+AppStream provides both traditional RPM and modules
+module: set or RPM package that belongs together
+-can have multiple app stream(app version), and can ENABLE one at a time
+-can have multiple profile(list of package install for a specific use)
+
+module: set of packages belong to an application with multiple version(stream) and install type(profile)
+yum module
+  list -> show all available module with coresponding version(stream) and install type(profile)
+  list php -> list all available php module
+  info php:7.3 -> view php(module version(stream) 7.3 info/profile
+  install php:7.3/common -> install/enable php 7.3 common
+  list php should now show php 7.3 as enabled/installed
+
+to switch to php 7.2
+yum module
+  remove php:7.3	-> uninstall
+  reset php	-> remove enable
+  install php -> without stream/profile, yum. will install default(php:7.2/common)
+
+---DONT INSTALL with RPM---
+rpm: programs used to be installed with downloaded rpm packages (dependency hell)
+now we have yum to fix all the dependency issue by using online repo
+local install
+rpm -Uvh pkg_file (old way) -> hope dependency were all installed
+yum localinstall pkg_file (deprecated)
+yum install pkg_file (new way) -> try to use repo toresolve dependency
+
+package database
+RPM DB: update when yum install or rpn install
+YUM DB: update only yum install**** this is why rpm install is DISCOURAGE ****
+
+rpm filename: pkg_name-version-subversion.OS_distro.arch
+rpm -q -> query RPM database(**INSTALLED)
+  -qa -> list all installed package(yum list installed)
+  -qi -> info on package (like yum info)
+  -ql -> list file in package
+  -qc -> list config file** quick way to find program configfile location i.e. rpm -qc php-common
+  -qd -> list DOC files
+  -qf */php.ini -> find which package this file belong to
+
+query local RPM FILE(use same flags as above)
+rpm -qp rpm_file -> query rpm_file
+  -R -> dependency
+  --scripts -> view install script(for malicious since run with root)
+repoquery -> query rpm_file on repo (like rpm -qp but no need to download rpm_file) yum install yum-utils -y
+repoquery -l php-0:7.2.11-2.module_el8.1.0+209+03b9a8ff.x86_64 (like rpm -qi pkg_file)
+
+putting it all together
+find out about nslookup
+rpm -qf $(which nslookup) -> bind-utils-9.11.4-26.P2.el8.x86_64
+rpm -qd bind-utils-9.11.4-26.P2.el8.x86_64 -> list DOC file relate to nslookup
+
+-------------------------------------
+process mgt
+
+ps aux -> short ACTIVE process summary **process in[] are kerrnel process
+  --sort=[+|-]key,key,...
+ps aux --sort=%cpu,-%mem | head -> sort by cpu(asce) and mem(desc)
+ps -elf -> include process cmd
+ps fax -> show tree
+
+set/change process niceness(-20...19) value (dafault 0)
+**niceness decreate/priority increase
+nice -n 19 sleep 10000 & -> nice == 19
+  -19 -> same
+nice -n -19 sleep 10000 & -> nice == -19 
+  --19 -> same
+renice -n 18 -p 13565
+  -n -> nice(optional)
+  -p -> pid(optional)
+  -g -> gid
+  -u -> uid/name 
+
+$$ -> parent(top level) shell
+$BASHPID -> shell or subshell pid -- echo $$ $BASHPID vs. ( echo $$ $BASHPID)
+
+dd if=/dev/zero of=/dev/null
+ctrl-z -> stop job
+gb -> continue job in bg
+dd if=/dev/zero of=/dev/null
+ctrl-z -> stop job
+gb -> continue job in bg
+
+jobs -l -> show 2 jobs running in bg
+fg 1 -> fg jobID 1 (default to previous bg job)
+ctrl-c -> cancel job
+fg
+ctrl-c
+kill -9 %jobID -> kill jobs
+
+
+( echo $BASHPID; read input; echo "$BASHPID : $input" ) -> add & to imediate put subshell in bg
+ctrl-z -> stop/freeze job **this job will auto show as stop because it swaiting for user input
+( echo $BASHPID; read input; echo "$BASHPID : $input" )
+ctrl-z -> stop/freeze job
+jobs -l -> list bg jobs with jobID
+
+
+kill jobs
+kill -l -> list signals (default 15(SIGTERM), 9(kill) cant be ignore)
+killall -> kill multiple process with samename
+pkill -9 -u 1000
+ -t pst/2 -> kill connected tty
+ -u/g uid/gid
+pgrep -> find pid
+  -g/u name/group
+  -a -> with full cmdline
+  -t -> tty
+
+mgt process with top
+ k -> kill process
+ r -> change nice
+ P -> sort %CPU
+ M -> sort %MEM
+
+ps aux | sort -n -r -k3 | head -10 -> top cpu usage
+
+tuned -> mgt performnce profile
+tuned-adm -> control tuned profile
+  active -> current profile
+  list -> show available
+  profile -> set profile
+  recommend -> recommend profile
+
+-------------------------------------
+systemd -> start/stop units(service/socket/mount/fs, etc)
+
+units file location and order precidence
+1) /run/systemd/system -> auto generated
+2) /etc/systemd/system -> custom by admin(what unit to start, symlink from below)
+3) /usr/lib/systemd/system -> default(generate when install package)
+
+yum install vsftpd -> create vsftpd unit files in /usr/lib/systemd/system/vsftpd.*
+systemctl enable vsftpd.service, create/delete symlink
+  /etc/systemd/system/multi-user.target.wants/vsftpd.service -> /usr/lib/systemd/system/vsftpd.service
+
+unit_file.service
+[Unit]
+Description=service description
+After=lead_adter_what.target
+[Service]
+Type=how service start i.e. fork,process,etc
+ExeStart=cmd_to_start_service
+[Install]
+WantedBy=target I belong to
+
+unit_file.target -> for server functionality i.e network
+[Target]
+Description=service description
+Requires=depended on what target
+Conflicts=cant run with who
+After=run after who
+[Install]
+
+unit_file.mount -> auto mount
+[Unit]
+Description=service description
+After=start_after_this_Service.service
+
+[Mount]
+What=/block/device
+Where=/unit_file -> this must be same as unit filename
+Type=filesystem_type
+
+[Install]
+WantedBy=multi-user.target -> mount in multiuser mode
+
+
+
+systemctl
+  list-unit-files -> show all installed unit files with state as enabled/disabled, etc
+  list-units(DEFAULT) -> show load and active units
+    -a -> show all(include not-found/inactive)
+    --state -> active/not-found/dead/active, etc. with list-unit-files will be enabled/disabled
+    -t unit type i.e. service/socket
+    --flag help -> any flag with help will list available arguments
+    cat -> show unit file config
+    show -> show all unit current config including defaults
+    edit -> create/edit custom unit file in /etc/systemd/system/unit_name.d/override.conf
+      **makesure to include correct parameter and section
+    daemon-reload -> reload unit files after edit
+      **not recommend but can copy unit file from /usr/lib/systemd/system to /etc/systemd/system 
+  
+-------------------------------------
+schedule task
+
+atd -> do sth once
+crond -> recuring(checks config every minute(that why config lowest is min)
+
+cron config
+min Hr day month day_of_week 0/7(sun)..6
+* -> all
+1-3 -> range
+1,3,5 -> list
+0 8,12,16 * * 1-5 whoami -> execute whoami every weekday at 8,12,1600
+
+/etc/crontab -> main config file, dont use
+/etc/cron.hourly/daily/weekly,etc -> used by RPM package (just add exec script)
+/etc/cron.d/ -> system wide cron by root
+/var/spool/cron/ -> user specific cron, use crontab -e to create/edit
+/etc/cron.deny -> deny crontab use
+
+crontab -> create edit USER cron config(/var/spool/cron/user_name)
+  -e -> edit/create config file
+  -u -> create/edit file as user
+  -l -> show current user cron
+  -r -> remove cron file
+
+system wide cron(default to root) -> /etc/cron.d/
+
+at time format
+  hh:mm [YYY-MM-DD]
+  10am [tomorrow/today]
+  + count minutes/ours/days/weeks -> job run count x unit i.e. 4pm + 3 minutes
+  
+at hh:mm	-> set job to run at hh:mm
+at> cmd to run	-> enter jobs
+at>ctrl-d	-> exit at shell
+
+atq -> show queue jobs
+atrm -> remove
+
+-------------------------------------
+logging
+
+log methods
+-direct write to log i.e. apache,samba
+-rsyslogd(update of rsyslogd) -> can filter message
+  store log in /var/log/*
+-journald(systemd-journald) -> non-persistance
+  store tmp log in /run/log/journal/*  
+
+
+log files /var/log/*
+  messages -> generic
+  dmesg -> kernel log
+  secure -> authenrication
+  boot.log -> system startup
+  audit.log -> auditd/SELinux
+
+log format
+time host process messahe
+dmesg
+
+rsyslog config
+/etc/rsyslog.conf -> main, what/where to log, has example formats
+/etc/rsyslog.d -> populate from RPM
+
+RULES man rsyslog.conf
+facility.priority destination -> log facility with priority =>, to destination
+facility.=priority [-]destination -> log facility with priority to destination(with buffering)
+
+facility -> event category authpriv/kern/local0-7(some service i.e. apache can be configured to log throught this)
+priority -> severity debug/info/notice/warn/err/crit/alert/emerg
+destination -> /etc/log/file..
+
+
+logger -p facility.priority message_to_log -> send msg with facility.priority to rsyslog
+
+journalctl -> default like less log_file, search with /, and ctrl+G to reach end
+  --since/S -> from date time "2020-05-11 14:00:00" yesterday,today,tomorrow
+  --until/U -> to date
+  -u -> unit i.e. sshd.service(samething when run systemctl status)
+  -f -> follow like tail -f file
+  -n -> last num lines
+  -p priority
+  --dmesg -> kernel
+  -r -> reverse, the nsearch with / like in less
+
+enable journald persistance/log rotation /etc/systemd/journald.conf
+Storage=
+  auto -> log to if folder exist /var/log/journal
+  persistent -> will log to /var/log/journal****
+  none -> no log, forward to rsyslog
+  ***restart systemd-journald.service***
+
+log rotation
+/etc/logrotate.conf -> main config file
+/etc/logrotate.d/*   
+
+-------------------------------------
+partition -> whole disk can be format/mount without partition
+fdisk -> both MBR/GPT
+gdisk -> only GPT
+
+
+MBR
+  max disk size 2T(2**32 sector)
+  4 partition(primary/extended)
+GPT
+  require by UEFI
+  128 partition
+  128 bit GUID partition ID
+
+/dev/
+  sda -> ast scsi
+  nvmeon1 -> SSD on pci express
+    nvmeon1p1 -> aprtition number
+
+fdisk -l -> list ALL MBR/GPT on systems***
+  fdisk /dev/disk..
+    F -> view unpartition space***
+lsblk -> view available disk
+blkid -> list disk/partition UUID/fs type
+df -Th -> disk usage/file system
+
+fdisk /dev/nvme0n2
+  p -> print disk info
+  o/g -> create new MBR/GPT
+  n -> add partition(if 4 partition exist and last partition is "extended", will ask to create logical partiton)
+  p -> choose primary/extended(for last partition)
+  add first sector
+  add last sector/+number unit i.e. +3G
+  t -> set partiton type(default linux)
+  w -> write to disk
+
+swap partition/file
+partition
+  mkswap -> format swap partition
+  swapon -> enable partiton as swap ***still need to add it to etc/fstab for persistence***
+  free -h -> show available swap and usage
+file
+  dd if=/dev/zero of=/root/swap bs=1G count=1 -> create swap file
+  mkswap /root/swap -> format swap
+  swapon /root/swap -> activiate swap 
+
+mount
+mount LABEL=|UUID=|dev/name /mnt/point
+** /dev/name can change, UUID does not
+
+mkfs.* -L labelname /dev/name -> label can be create on file systenm creation
+e2label (ext*)
+xfs_admin (xfs)
+
+/etc/fstab (mount -a)
+UUID=|/dev/name                           /mnt/point filesystem options  dump_support auto_check
+UUID=e7147d0f-fd84-4b72-a0ba-dd7fd9fbbbde /boot      xfs        defaults 0            0
+
+disk image
+dd if=/dev/zero of=/home/student/1G.ext4 bs=1G count=1
+mkfs.ext4 /home/student/1G.ext4
+mount /home/student/1G.ext4 /root/mount [-o loop] **seems to know its loop
+
+mounting with systemd
+use example mount unit file from tmp.mount, and modify to
+systemctl cat tmp.mount
+vi /usr/lib/systemd/system/unit_file.mount
+
+[Unit]
+Description=service description
+After=start_after_this_service.service
+
+[Mount]
+What=/block/device
+Where=/unit_file -> this must be same as unit filename
+Type=filesystem_type
+
+[Install]
+WantedBy=multi-user.target -> mount in multiuser mode
+
+systemctl daemon-reload
+systemctl enable unit_file.mount
+systemctl start unit_file.mount
+
+-------------------------------------
+LVM -> dynamically grow/shring storage
+
+1) flag storage as pv(physical volume)
+2) add pv to vg(volume group)
+3) create/extend lv(logical volume) from vg
+4) write filesystem in lv, and mount
+
+snapshot -> copy lv metadata to snapshot volume(backup)
+
+[pv/vg/lv]create/s/extend/remove/display
+
+use fdisk create GPT 5 2G partitions with linux LVM(31)--required
+
+physical volume
+pvcreate /dev/nvme0n2p{1..5} -> create 5 pv
+pvs -> pv info
+***pvcreate on whole disk instead of partioned will work on linux but not recommend
+https://www.tldp.org/HOWTO/LVM-HOWTO/initdisks.html
+
+volume group
+vgcreate vgBla /dev/nvme0n2p1 -> create vg and add pv
+vgextend vgBla /dev/nvme0n2p2 -> add pv to vg
+vgremove vgBla -> delete vg
+vgcreate vgBla /dev/nvme0n2p{1..5} -> create vg and add multiple pv(nnon eed to mark disk as pv)
+  -s -> physical extent size(default 4M) lv are multiple of this size like cluster in disk
+vgs -> vg info
+
+logical volume
+lvcreate -L 4G vgBla -> create 4G lv from vgBla
+  -L -> size
+  -l -> % of vg
+  -n -> specify name
+lvs -> lv info
+lvdisplay /dev/vgBla/lvol0 -> info on lv
+lvresize -L [+|-]size /dev/vgBla/lvol0
+lvresize -L +1G /dev/vgBla/lvol0 -> add 1G
+  -r -> auto update fs
+  **manual resize fs
+    e2fsck -f /dev/vgBla/lvol0
+    resize2fs /dev/vgBla/lvol0
+lvextend/lvreduce are available too
+mkfs.ext4 /dev/vgBla/lvol0 -> then write fs to lv****
+lvremove /dev/vgBla/lvol0 -> delete
+
+lvm name both symlink to /dev/dm-* (device mapper)
+/dev/vg/lv
+/dev/mapper/vg-lv
+
+XFS -> only increase lv
+EXT4 -> increase/decrease lv
+
+stratis -> volume mgt
+  -only XFS
+  -need stratisd service
+
+install setup
+yum install stratis-cli stratisd -y
+systemctl enable stratisd.service 
+systemctl start stratisd.service 
+
+general process
+1) add disk to create pool
+2) create fs from pool
+3) mount it
+
+stratis
+  blockdev -> list block device size
+  filesystem -> fs related op
+  pool -> pool related op
+
+stratis pool create myPool /dev/nvme0n2 -> add disk
+***wipefs --all /dev/disk -> wipe disk if it contains fs/partion table
+stratis pool add-data myPool /dev/nvme0n2 -> add another disk
+stratis filesystem create myPool myFs -> create XFS fs
+mount /stratis/myPool/myFs /root/mount -> mount it
+
+when mount with etc/fstab
+  use UUID, name works for me??
+  add permission -> defaults,x-systemd.requires=stratisd.service
+
+VDO(data optimizer) -> vdo.service
+  reduce block usage/size zero elimination.compression/duplication
+  good for VM
+
+man systemd.mount -> see systemd related mount options
+
+yum install vdo kmod-kvdo -y -> if not installed 
+
+vdo create --name myVdo --device /dev/nvme0n2 --vdoLogicalSize 1T
+
+vdostats --human-readable
+mkfs.xfs -K /dev/mapper/myVdo ***ext4 works too***
+mount /dev/mapper/myVdo /root/mount
+
+mount with /etc/fstab
+/dev/mapper/myVdo /root/mount xfs defaults,x-systemd.requires=vdo.service,discard 0 0
+
+**since both stratis/vdo requies service, maybe auto mount them wuth systemd
+[Unit]
+After=stratisd.service
+
+[Mount]
+What=/stratis/myPool/fs1
+Where=/Stratis
+Type=xfs
+
+[Install]
+WantedBy=multi-user.target
+
+-------------------------------------
+kernel
+
+systemd-udevd.service continuous monitor HW
+  -load driver/make ready
+  -read config in
+    /usr/lib/udev/rules.d/
+    /etc/udev/rules.d/
+  -write HW/kernel modle stats to /sys
+
+udevadm monitor -> monitor HW stats
+
+lsmod -> list km(kernel modules)
+modinfo -> show param/info
+modprobe -> load modules and dependencies
+  -r -> remove
+
+insmod/rmmod -> deprecated
+
+lspci -> list all pci device
+  -k -> show their loaded km
+  **if no km found, device probably needs driver
+
+load/auto load km param
+modprobe km param_name=param_value
+echo "options km param_name=param_value" > /etc/modprobe.d/km.conf 
+
+upgrade kernel
+yum upgrade kernel
+yum install kernel
+
+-------------------------------------
+boot
+
+unit_file.target -> everything system needs for a specific function/state i.e.
+systemctl cat multi-user.target -> require/after
+ls -l /usr/lib/systemd/system/multi-user.target.wants/ -> service that gets loaded
+
+boot state
+  emergency -> bare minimum fix system
+  rescue -> start required linux units
+  multi-user -> base for full function system i.e. server
+  graphical -> multi-user + graphic
+
+unit_file.target.wants/ -> contains symlink to required ../unit_files i.e.
+/usr/lib/systemd/system/unit_file.target.wants/
+once systemctl enable unit_file, symlinks are created in 
+/etc/systemd/system/unit_file.target.wants/
+
+isolating target -> start target with only its dependents (unit file need AllowIsolate=yes)
+systemctl
+  get-default -> show default target
+  set-default -> change it
+  isolate target -> switch to target
+
+systemctl isolate poweroff.target
+
+old run level to tagets mapp 
+runlevel0.target -> poweroff.target
+runlevel1.target -> rescue.target
+runlevel2/3/4.target -> multi-user.target
+runlevel5.target -> graphical.target
+runlevel6.target -> reboot.target
+
+grub -> load kernel/initramfs(mini fs with required modules)
+/etc/default/grub -> GRUB_CMDLINE_LINUX == kernel boot argument ******
+/etc/grub.d/*
+
+auto generated
+/boot/grub2/grub.cfg -> config on BIOS system
+/boot/efi/EFI/redhat/ -> config on EFI system
+
+GRUB_CMDLINE_LINUX
+   rhgb/quiet -> hide output while boot 
+
+man 7 bootparam -> man on GRUB_CMDLINE_LINUX param
+
+
+update grub config
+vi /etc/default/grub
+grub2-mkconfig -o /boot/grub2/grub.cfg (BIOS) generate new grub main config file
+		  /boot/efi/EFI/redhat/grub.cfg (EFI)
+
+boot to /bin/bash
+on boot mode selection, enter edit mode 'e'
+add init=/bin/bash to end of kernel parameter
+ctrl-x -> start
+
+-------------------------------------
+troubleshoot
+
+at select boot mode screen
+  e -> edit kernel boot parameter(line begin with linux) then ctrl-x to stsrt kernel
+    -remove "rhgb" and "quiet" -> show boot message
+    -rd.break -> boot to initranfs stage
+    -single -> enter single usermocde(require root password)
+    -init=/bin/bash -> boot to root bash
+      change root password
+        ****this mount / as ro, so remount as rw, load selinux policy, then update root password(will hang if not selinux load policy)
+        mount -o remount,rw /
+        /sbin/load_policy -i -> load initial selinux policy from initramfs(so selinux tracks file change)
+        passwd
+        /sbin/reboot -f -> reboot without talking to init(***will screwup LVM/VDO/STRATIS****)
+    -systemd.unit=emergency.target -> boot into emergency, require root password
+    -systemd.unit=rescue.target -> boot into rescue, require root password
+  c -> grub prompt
+    -exit -> to rescue disk
+      troubleshoot
+        rescue a RH
+          continue: mount original fs to /mnt/sysimage/(RW), adn the rescue fs to /	***best dont need to deal with seLinux***
+            chroot /mnt/sysimage -> mount old fs back
+            do whatever as root
+            exit -> getout of chroot (or changes wont be written)
+            reboot -> will caise seLinux relabel entire fs***
+          read-only mount: same as above except mount /mnt/sysimage/(RW)
+          skip to shell: mount rescue to / only
+
+reinstall grub2
+go to rescue, continue, chroot /mnt/sysimage and grub2-install /on/bootdisk
+
+filesystem recovery, edit /etc/fstab	*** exam ***
+you are in emergency mode...type journelctl -bx
+give root password for maintenance
+
+journelctl -bx -> then shift+g to go to bottom
+find erro related to mount fs, and fix it(probably /boot)
+**look for hoghlights
+
+found boot.mount fail
+ststemctl cat boot.mount shows mount to /dev/nvme0n1p4
+lsblk says does not exist, it should be /dev/nvme0n1p1(boot) or just set new UUID
+so fix it /etc/fstab
+
+
+lsblk to get disk map
+blkid -> get uuid
+vi /etc/fstab -> reset disk uuid
+reboot
+
+/dev/nvme0n1p1
+
+-------------------------------------
+shell script
+
+math op -> take out $ infront of varname and do them in (()), ass $ infront of (()) to output results like $(cmd ...)
+v1=1; v1=2; v1=3
+res=$(( v1 + v2 + v3 )) #do math op on variable and asssign to var
+echo _ $res
+
+(( v1 += v2 )) #just doing math op on var
+(( v1 += v3 ))
+echo _ $v1
+
+loops
+num=100
+if [ $num == 10 ]
+  then echo "equal"
+elif [ $num != 10 ]
+  then echo "not equal"
+fi
+
+num=3
+while (( $num > 0 ))
+do  
+  echo $num
+  (( num-- ))    
+done
+
+for(( num=0; num < 3; num++))	#this is why for use (())
+do      
+  echo "$num"
+done
+
+bash -x -> debug***
+
+local user chat(send message to another user with write)
+w -> to get user and tty i.e. root pts/2 
+write user tty_name i.e. root pts/2
+->then chat....
+
+lab 19.1.1
+(( $# > 0 )) || (echo "expect args"; exit)
+[[ $1 == "one" ]] && touch /tmp/one
+[[ $1 == "two" ]] && term=$(w | awk '/root/ {print $2}') && echo two | write root $term
+
+lab 19.1.2
+(( $# == 1 )) || ( echo "one minite arg"; exit)
+sec=$(( $1*60 ))
+for s in $(seq $sec -1 1)
+do      
+  echo "$s sec togo"
+  sleep 1
+done
+
+-------------------------------------
+ssh
+
+PermitRootLogin yes -> (default), so change to no
+AllowUsers user1 user2 -> (default all) permit only these users
+PasswordAuthentication no -> force use keys
+**ClientAliveInterval 10 -> wait 10 sec b/4 send client msg
+**ClientAliveCountMax 0 -> number of msg sent b/4 disconnect if no response
+MaxAuthTries -> num attempt b/4 lock
+Port 22 -> (default), change to sth else i.e 2022
+  will get permission deny error once restart sshd due to seLinux
+
+edit seLinux to allow sshd use port 2022
+semanage port -l | grep ssh -> list current sshd port label
+semanage port -at ssh_port_t -p tcp 2022 -> append tcp 2022 to ssh_port_t seLinux port label
+
+semanage port
+  -t -> seLinux obj type 
+  -a -> port to a label(if port has not been assigned a label)
+  -m -> modify CURRENT port assignment
+  -l -> list available
+
+firewall-cmd --list-all -> view current firewall config
+firewall-cmd --add-port=2022/tcp --permanent
+firewall-cmd --remove-service=ssh
+
+ssh student@10.0.0.100 -p 2022 -> should work now
+
+-------------------------------------
+httpd
+
+config dirs
+/etc/httpd/conf/ -> main conf dir
+/etc/httpd/conf.d/ -> other config i.e. RPM, virtualhost
+/etc/httpd/conf.modules.d -> module config dir
+
+/etc/httpd/conf/httpd.conf -> main config
+
+grep -v '#' /etc/httpd/conf/httpd.conf
+
+ServerRoot /etc/httpd -> config root dir
+DocumentRoot -> /var/www/html content root dir
+
+echo "welcome to my webserver" > /var/www/html/index.html
+systemctl enable --now httpd -> enable anad start httpd
+curl http://localhost
+
+
+	***not in exam***
+virtualhost -> 1 IP with multiple hostname pointing to multiple documentRoot
+ _default_:80 -> default virtualhost
+
+
+vim /etc/httpd/conf.d/sales.com.conf ->create sales.com vistualhost config
+<VirtualHost *:80>
+  DocumentRoot /var/www/sales
+  ServerName sales.com
+</VirtualHost>
+
+mkdir /var/www/sales
+echo 'sales in /var/www/sales is up!!' > /var/www/sales/index.html
+systemctl restart httpd
+
+yum install httpd-manual -> for httpd manual at localhost/manual
+
+-------------------------------------
+seLinux -> all syscalls need explicit allow(default deny all) 
+context label -> define access rules
+
+log to -> /var/log/audit/audit/log
+
+SD(source domain) -> obj trying to access sth
+TD(target domain) -> think that SD trying to access
+rules -> which SD has what PERMISSION on TD
+policy -> collection of rules
+
+context -> obj category file/dir/port/process/user
+labels -> which SD has ACCESS on TD
+
+seLinux State
+-enable -> km loaded, app use seLinux lib	***seLiux must be enabled on the exam****
+  enforce
+  permissive -> no block, just log to /var/log/audit/audit/log
+-disable -> require restart
+  edit /etc/sysconfig/selinux to disable or change boot mode(per/enforce)
+
+getenforce -> show enforce/permissive
+setenforce (0|1) -> ser permissive/enforce
+sestatus -v -> detail seLinux state
+
+view obj context -> add -Z to cmd related to file/process/port/user
+  ls -Z
+  netstat -anZ
+  ps -eZ / auxZ
+  id -Z
+
+system_u:object_r:etc_t:s0
+  _u -> user
+  _r -> role
+  _t -> type -> 	***know this for exam****
+
+semanage -> set/edit context to policy
+restorecon -Rv obj -> write context from policy to fs 
+chcon -> non persistence set/edit file context, overwritten by restorecon/reboot
+***dont use during exam***
+
+chcon -Rvt httpd_sys_content_t /web -> (non persistence) verbose update /web recursicely with seLinux obj type
+  **good for testing, which can be reset with restorecon -Rv /web
+
+for help on semanage
+  man semanage -> see also
+  man semanage-the_se_type -> EXAMPLE sections
+
+finding context type for files/
+  -check existing contect type
+  -red config file
+  
+
+yum provides */sepolicy -> find rpm with selinux policy pack
+yum -y install policycoreutils-devel -> install selinux man page
+sepolicy manpage -a -p /usr/share/man/man8 -> setup selinux man page
+mandb -> update mandb
+man -k _selinux -> list all selinux man page
+
+
+file context
+  -new/copy files inherit from parent dir
+  -mv/cp -a, file maintain context
+
+relabel file system
+  touch /.autorelabel -> auto relabel on boot
+  restorecon -Rv / -> write policy to fs
+  ***if seLinux detect fs changed without its monotor, it will relabel the fs*** 
+
+getsebool -a -> get list of seLinux bool value
+semanage boolean -l
+
+view seLinux violation log(type=AVC)
+grep AVC /var/log/audit/audit.log
+
+-------------------------------------
+firewalld
+
+iptables(old) --interface--> netfilter(inspect packet)
+firewalld(new) --interface--> netfilter(inspect packet)
+
+zone -> collection of rules in ingress packet(none on out going pkt)
+  match against ingress pkt source addr
+
+default zones -> preset zones
+  public(default on new interface) -> no trust
+  internal/hone -> trusted
+
+firewalld service(port) -> specify in/egress traffic for that proto
+  /usr/lib/firewalld/services/* -> RPM service config  
+  /etc/firewalld/services/* -> user defined service config
+
+firewall-cmd
+  --get-default-zone -> current zone
+  --get-zones -> availble zones
+  --get-services -> list vailable service(config files)
+  --list-all -> summary of current zone
+  --zone= -> this zone
+  --add-service=vnc-server -> add vnc service to running config	***on exam stick with service***
+  --add-port=4444/tcp -> add tcp 4444
+  --permanent -> add to end of each config to save to disk
+  --reload -> reload config from disk(any memory config will be gone
+  --runtime-to-permanent -> write memory config to disk****
+
+-------------------------------------
+network storage
+
+nfs (server setup not in exam)
+/etc/exports
+share client1 client2...(op1,op2..)
+/nfs *(rw,no_root_squash)	-> sample nfs share config
+
+systemctl enable --now nfs-server.service -> start nfs service
+firewall-cmd --add-service=nfs --permanent -> add nfs service, write to disk
+firewall-cmd --reload -> load config from disk
+
+client
+yum install nfs-utils -y
+showmount -e server_ip -> show server nfs export(***require rpc so firewalld should be down)
+mount server_ip:/nfs /nfs -> mount server share to /nfs(***require firewalld nfs service added) 
+
+mount via /etc/fstab
+server_ip:/nfs /nfs nfs defaults 0 0
+
+smb (server setup not in exam)
+server setup
+yum install samba -y
+mkdir /sambashare
+edit /etc/samba/smb.conf
+
+
+systemctl enable --now smb.service
+firewall-cmd --add-service=samba --permanent
+firewall-cmd --reload
+
+client
+yum install samba-client -y
+smbclient -L //server_ip
+smbclient -N //server_ip -c "puts file1.txt"
+yum install cifs.utils -y
+mount.cifs //server_ip/smb /smb -o guest -> seems to work great
+
+[user]
+path = /user
+valid users = student
+read only = no
+smbpasswd -a student
+chmod o+w /user
+#semanage boolean -m samba_export_all_ro -1  -> export read only
+semanage boolean -m samba_export_all_rw -1 -> export WR
+mount.cifs //server_ip/user /smb -o username=student,password=smbpassword
+
+[smbshare]
+path = /smbshare
+public = yes
+read only = no
+chmod o+w /smbshare
+#semanage boolean -m samba_export_all_ro -1
+semanage boolean -m samba_export_all_rw -1
+mount.cifs //server_ip/smbshare /smbmount -o guest
+
+
+mount via /etc/fstab(use mount.cifs)
+//server+ip/sambashare /sambashare guest 0 0
+
+
+autofs -> service mount smb/nfs on access attempt(no mount/root perm requires)
+nfs
+yum install nfs-utils autofs -y
+/etc/auto.master
+  -> /mount_point /etc/auto.mount_key
+/etc/auto.mount_key
+  -> mount_key -fstype=nfs,rw server_ip:/nfs_share. **nfs server_ip:/nfs_share --works too
+
+wildcard mount same as nor mount except
+  mount_key == * -> mount with sanme names from &
+  server_ip:/nfs_share == server_ip:/nfs_share/&
+systemctl enable --now autofs
+**mount will show /etc/auto.mount_key /mount_point
+ls /mount_point -> will be empty
+ls /mount_point/mount_key -> will trigger mount
+
+smb
+server
+semanage fcontext -a -t samba_share_t /share
+restorecon -v /share
+client
+yum install nfs-utils autofs -y
+/etc/auto.master
+  /automount /etc/auto.automount
+/etc/auto.automount
+  smb -fstype=cifs,rw,guest ://server_ip/share
+
+-------------------------------------
+time server
+epoc time -> sec since 01JAN1970
+
+date
+  +%Y-%m-%d -> yyyy-mm-dd
+  +%s -> sec since epoc
+  -s "2010-01-01 13:00" -> set date/time (no date assume today, no time assume 00:00)
+
+hwclock
+  --systohc -> sync system time to hw
+  --hctosys
+tzselect -> help pick timezone
+timedatectl
+  set-timezone
+  set-ntp -> turn on/off ntp
+  set-time "2010-01-01 16:00" (need ntp 0)
