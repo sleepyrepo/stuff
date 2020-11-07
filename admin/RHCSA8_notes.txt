@@ -674,6 +674,8 @@ rpm -qp rpm_file -> query rpm_file
 repoquery -> query rpm_file on repo (like rpm -qp but no need to download rpm_file) yum install yum-utils -y
 repoquery -l php-0:7.2.11-2.module_el8.1.0+209+03b9a8ff.x86_64 (like rpm -qi pkg_file)
 
+yum repoquery "*/makeinfo" --repo PowerTools 		#alredy included in new updates
+
 putting it all together
 find out about nslookup
 rpm -qf $(which nslookup) -> bind-utils-9.11.4-26.P2.el8.x86_64
