@@ -2,7 +2,6 @@
 use strict;
 use lib (".", "../lib/lib/perl5");		#point ot lib dirs
 use Smb2::Client;
-use Data::Dumper;
 
 my $client = Smb2::Client->new(
   user => "user",
