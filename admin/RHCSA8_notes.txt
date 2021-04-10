@@ -50,6 +50,9 @@ add \c at end of string i.e. :/search_str\c
 
 :set all -> to list all set options/settings
 
+change vim autoindent(default 8)
+:set shiftwidth=2
+
 :%s/str/newstr/g -> global sub
 :line_number -> go to line_number
 **no"__options__" -> turn on/off
