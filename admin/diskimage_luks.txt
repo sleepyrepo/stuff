@@ -29,9 +29,9 @@ fix gnome-disk-image-mounter default mount R only
   sed -i 's|Exec=gnome-disk-image-mounter %U|Exec=gnome-disk-image-mounter -w %U|' ~/.local/share/applications/gnome-disk-image-mounter.desktop 
 
 backup/restore luks header
-cryptsetup luksHeaderBackup ./data.img --header-backup-file data.img.header_backup
-cryptsetup luksDump data.img.header_backup 		#read luks header
-cryptsetup luksHeaderRestore ./data.img --header-backup-file data.img.header_backup
+  cryptsetup luksHeaderBackup ./data.img --header-backup-file data.img.header_backup
+  cryptsetup luksDump data.img.header_backup 		#read luks header
+  cryptsetup luksHeaderRestore ./data.img --header-backup-file data.img.header_backup
 
 https://www.cyberciti.biz/security/how-to-backup-and-restore-luks-header-on-linux/
 
