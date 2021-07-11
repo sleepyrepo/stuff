@@ -1,0 +1,35 @@
+CLI create/setup/close
+  fallocate -l 1GB bla.img
+  cryptsetup luksFormat bla.img				#setup/crypt disk with luks 
+  sudo cryptsetup luksOpen bla.img BLA			#decrypt/attach to loop device /dev/loop0, and /dev/mapper/BLA
+  sudo mkfs.ext4 /dev/mapper/BLA			#add file system(ext4/xfs/fat)
+  sudo mkdir /mnt/BLA					#create mount point	
+  sudo mount /dev/mapper/BLA /mnt/BLA
+  sudo chown -R mee:mee /mnt/BLA			#change own after mount(was root)
+  cp ../.viminfo /mnt/BLA/
+  sudo umount /mnt/BLA					#need to unmount fs first 
+  sudo cryptsetup luksClose BLA				#close luks 
+
+GUI way
+disk
+  new disk image(left top corner)
+  size,name,save to
+  attach new image
+  highlight new attached disk (/dec/loop)
+  setting
+    format partiton
+    name BLA
+    ext4 + luks
+    password
+right click .img file
+  set open with default to Disk Image Mounter" aka gnome-disk-image-mounter
+now doubl click on .img file will auto mount/check password (default mount only R)
+fix gnome-disk-image-mounter default mount R only
+  cp /usr/share/applications/gnome-disk-image-mounter.desktop ~/.local/share/applications/
+  vim ~/.local/share/applications/gnome-disk-image-mounter.desktop
+  update: Exec=gnome-disk-image-mounter -w %U
+
+
+
+backup liks img header
+https://www.cyberciti.biz/security/how-to-backup-and-restore-luks-header-on-linux/
