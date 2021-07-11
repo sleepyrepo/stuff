@@ -26,10 +26,12 @@ right click .img file
 now doubl click on .img file will auto mount/check password (default mount only R)
 fix gnome-disk-image-mounter default mount R only
   cp /usr/share/applications/gnome-disk-image-mounter.desktop ~/.local/share/applications/
-  vim ~/.local/share/applications/gnome-disk-image-mounter.desktop
-  update: Exec=gnome-disk-image-mounter -w %U
+  sed -i 's|Exec=gnome-disk-image-mounter %U|Exec=gnome-disk-image-mounter -w %U|' ~/.local/share/applications/gnome-disk-image-mounter.desktop 
 
+backup/restore luks header
+cryptsetup luksHeaderBackup ./data.img --header-backup-file data.img.header_backup
+cryptsetup luksDump data.img.header_backup 		#read luks header
+cryptsetup luksHeaderRestore ./data.img --header-backup-file data.img.header_backup
 
-
-backup liks img header
 https://www.cyberciti.biz/security/how-to-backup-and-restore-luks-header-on-linux/
+
